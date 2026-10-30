@@ -5,9 +5,9 @@ metadata:
   namespace: mayday
 data:
   AWS_REGION: us-east-1
-  TARGET_URL: ""
-  TARGET_INSTANCE_ID: ""
+  TARGET_URL: "http://10.0.2.175:8081"
+  TARGET_INSTANCE_ID: "i-0caaf940144f902b3"
   LICENSE_BUCKET: mayday-234878555361-us-east-1
   LICENSE_KEY: license/demo-license.json
   STOP_DOCUMENT_NAME: MaydayStopService
-  FLOWS_WEBHOOK_URL: ""
+  FLOWS_WEBHOOK_URL: "https://infallible-partridge-q2y1.endpoints.useflows.eu/ebef4de62c37704e1b44baef38192f68"

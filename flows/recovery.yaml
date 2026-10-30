@@ -1,54 +1,697 @@
-appInstallations:
-  mayday:
-    appName: Mayday Monitor
-    appVersion: 0.1.0
 blocks:
-  - name: Observe Mayday
+  - name: Accept observation
+    description: Return 202 after durable acceptance. Recovery continues asynchronously.
     type:
-      appBlock: {block: monitor, appInstallation: mayday}
-    position: [100, 350]
-  - name: Restart service
-    type:
-      appBlock: {block: repair, appInstallation: mayday}
-    position: [500, 50]
-    config: {action: restart}
+      coreBlock: transform
+    position: [280, 1620]
     inputs:
       default:
-        links: [{block: Observe Mayday, output: restart}]
-        config: {incident: !expr previous}
-  - name: Gather evidence for Intelligence
+        links:
+          - block: Remember delivery
+            output: default
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr ({status:202,body:{accepted:true}})
+  - name: Acknowledge duplicate
+    description: Duplicate deliveries return 202 without starting another action.
     type:
-      appBlock: {block: repair, appInstallation: mayday}
-    position: [500, 200]
-    config: {action: diagnose}
+      coreBlock: transform
+    position: [280, 1080]
     inputs:
       default:
-        links: [{block: Observe Mayday, output: diagnose}]
-        config: {incident: !expr previous}
-  - name: Increase worker capacity
+        links:
+          - block: First delivery
+            output: else
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr ({status:202,body:{accepted:true,duplicate:true}})
+  - name: Apply baseline
+    description: Run the existing service stack to restore the baseline.
     type:
-      appBlock: {block: repair, appInstallation: mayday}
-    position: [500, 350]
-    config: {action: scaleUp}
+      coreBlock: spacelift
+      kind: triggerRun
+    position: [2000, 2460]
+    inputs:
+      trigger:
+        links:
+          - block: Set baseline capacity
+            output: result
+        config:
+          runType: TRACKED
+          stackId: mayday-service
+    errorHandler: Catch orchestration errors
+  - name: Apply increased capacity
+    description: Run the existing service stack with eight application workers.
+    type:
+      coreBlock: spacelift
+      kind: triggerRun
+    position: [1300, 2460]
+    inputs:
+      trigger:
+        links:
+          - block: Set eight workers
+            output: result
+        config:
+          runType: TRACKED
+          stackId: mayday-service
+    errorHandler: Catch orchestration errors
+  - name: Apply reduced capacity
+    description: Run the existing service stack with two application workers.
+    type:
+      coreBlock: spacelift
+      kind: triggerRun
+    position: [1650, 2460]
+    inputs:
+      trigger:
+        links:
+          - block: Set two workers
+            output: result
+        config:
+          runType: TRACKED
+          stackId: mayday-service
+    errorHandler: Catch orchestration errors
+  - name: Authenticate monitor
+    description: Check the shared webhook token before accepting observations.
+    type:
+      coreBlock: condition
+    position: [600, 180]
     inputs:
       default:
-        links: [{block: Observe Mayday, output: scaleUp}]
-        config: {incident: !expr previous}
-  - name: Reduce worker capacity
+        links:
+          - block: Monitor webhook
+            output: requests
+        config:
+          condition: !expr Boolean(secrets.MAYDAY_WEBHOOK_TOKEN) && (outputs.monitorWebhook.headers.authorization || outputs.monitorWebhook.headers.Authorization) === `Bearer ${secrets.MAYDAY_WEBHOOK_TOKEN}`
+  - name: Capacity decrease
+    description: Light traffic requests the two-worker baseline.
     type:
-      appBlock: {block: repair, appInstallation: mayday}
-    position: [500, 500]
-    config: {action: scaleDown}
+      coreBlock: condition
+    position: [1650, 2100]
     inputs:
       default:
-        links: [{block: Observe Mayday, output: scaleDown}]
-        config: {incident: !expr previous}
-  - name: Restore baseline
+        links:
+          - block: Capacity increase
+            output: else
+        config:
+          condition: !expr outputs.normalizeIncident.event.incident.kind === `capacity_down`
+    errorHandler: Catch orchestration errors
+  - name: Capacity increase
+    description: Heavy traffic requests eight application workers.
     type:
-      appBlock: {block: repair, appInstallation: mayday}
-    position: [500, 650]
-    config: {action: reset}
+      coreBlock: condition
+    position: !blockUnits [13, 15]
     inputs:
       default:
-        links: [{block: Observe Mayday, output: reset}]
-        config: {incident: !expr previous}
+        links:
+          - block: Service outage
+            output: else
+        config:
+          condition: !expr outputs.normalizeIncident.event.incident.kind === `capacity_up`
+    errorHandler: Catch orchestration errors
+  - name: Capture run result
+    description: Preserve the completed Spacelift run ID, state, and links.
+    type:
+      coreBlock: transform
+    position: [1300, 2720]
+    inputs:
+      default:
+        links:
+          - block: Apply baseline
+            output: completed
+          - block: Apply increased capacity
+            output: completed
+          - block: Apply reduced capacity
+            output: completed
+          - block: Gather diagnostic evidence
+            output: completed
+          - block: Restart service with Ansible
+            output: completed
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr previous
+    errorHandler: Catch orchestration errors
+  - name: Catch intake errors
+    type:
+      coreBlock: handleError
+    position: [950, 900]
+  - name: Catch orchestration errors
+    description: Capture native block errors without automatically rerunning mutations or deployments.
+    type:
+      coreBlock: handleError
+    position: [950, 3800]
+  - name: Diagnostic action
+    description: Diagnostics end at evidence collection. Intent owns restoration of the license.
+    type:
+      coreBlock: condition
+    position: !blockUnits [13, 22]
+    inputs:
+      default:
+        links:
+          - block: Run finished successfully
+            output: then
+        config:
+          condition: !expr outputs.normalizeIncident.event.incident.kind === `dependency`
+    errorHandler: Catch orchestration errors
+  - name: Evidence ready for Intelligence
+    description: Record the diagnostics run and incident ID for the presenter.
+    type:
+      coreBlock: memorySet
+    position: [950, 3260]
+    inputs:
+      default:
+        links:
+          - block: Diagnostic action
+            output: then
+        config:
+          key: !expr outputs.normalizeIncident.event.id
+          collection: mayday-attempts
+          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`evidence_ready`,incident:outputs.normalizeIncident.event.incident,run:outputs.captureRunResult,at:Date.now(),next:`Ask Intelligence to investigate; restore the license through Intent`})'
+          ttl: 86400
+    errorHandler: Catch orchestration errors
+  - name: Find prior delivery
+    description: Look up the event ID in the deduplication ledger.
+    type:
+      coreBlock: memoryGet
+    position: [600, 900]
+    inputs:
+      default:
+        links:
+          - block: Serialize event intake
+            output: acquired
+        config:
+          key: !expr outputs.normalizeIncident.event.id
+          collection: mayday-deliveries
+    errorHandler: Catch intake errors
+  - name: First delivery
+    description: Only a previously unseen event is dispatched.
+    type:
+      coreBlock: condition
+    position: [600, 1080]
+    inputs:
+      default:
+        links:
+          - block: Find prior delivery
+            output: default
+        config:
+          condition: !expr '!outputs.findPriorDelivery.found'
+    errorHandler: Catch intake errors
+  - name: Gather diagnostic evidence
+    description: Run mayday-diagnostics; evidence supports the manual Intelligence and Intent repair.
+    type:
+      coreBlock: spacelift
+      kind: triggerRun
+    position: [600, 2460]
+    inputs:
+      trigger:
+        links:
+          - block: Missing dependency
+            output: then
+        config:
+          runType: TRACKED
+          stackId: mayday-diagnostics
+    errorHandler: Catch orchestration errors
+  - name: Missing dependency
+    description: Send license failures to diagnostics for Intelligence and Intent.
+    type:
+      coreBlock: condition
+    position: !blockUnits [6, 15]
+    inputs:
+      default:
+        links:
+          - block: Record recovery attempt
+            output: default
+        config:
+          condition: !expr outputs.normalizeIncident.event.incident.kind === `dependency`
+    errorHandler: Catch orchestration errors
+  - name: Monitor webhook
+    description: Receives authenticated Mayday observations from the private EKS monitor over outbound HTTPS.
+    type:
+      coreBlock: httpEndpoint
+    position: !blockUnits [6, 0]
+    config:
+      path: /ebef4de62c37704e1b44baef38192f68
+      methods:
+        - POST
+      audience: world
+    inputs:
+      default:
+        links:
+          - block: Accept observation
+            output: default
+          - block: Acknowledge duplicate
+            output: default
+          - block: Reject invalid event
+            output: default
+          - block: Reject unauthorized
+            output: default
+          - block: Retry observation later
+            output: default
+        config:
+          statusCode: !expr previous.status
+          body: !expr previous.body
+          headers:
+            Content-Type: !expr '`application/json`'
+    outputs:
+      requests:
+        sensitivePaths:
+          - $.headers.authorization
+          - $.headers.Authorization
+  - name: New incident
+    description: Telemetry and recovery observations update evidence; only incident.opened starts a run.
+    type:
+      coreBlock: condition
+    position: [600, 1620]
+    inputs:
+      default:
+        links:
+          - block: Remember delivery
+            output: default
+        config:
+          condition: !expr outputs.normalizeIncident.event.type === `incident.opened`
+  - name: Normalize incident
+    description: Keep the validated event, action, and receipt timestamp for correlation.
+    type:
+      coreBlock: transform
+    position: [600, 540]
+    inputs:
+      default:
+        links:
+          - block: Validate observation
+            output: then
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr '({event: outputs.monitorWebhook.body, since: Date.now(), deadline: Date.now()+600000})'
+  - name: Read independent observation
+    description: Read the latest observation pushed by the monitor; no inbound access to the private target.
+    type:
+      coreBlock: memoryGet
+    position: [1650, 3260]
+    inputs:
+      default:
+        links:
+          - block: Diagnostic action
+            output: else
+          - block: Wait for next observation
+            output: default
+        config:
+          key: !expr outputs.normalizeIncident.event.incident.id
+          collection: mayday-observations
+    errorHandler: Catch orchestration errors
+  - name: Read recovery outcome
+    description: Check whether the attempt already reached a terminal outcome.
+    type:
+      coreBlock: memoryGet
+    position: !blockUnits [6, 22]
+    inputs:
+      default:
+        links:
+          - block: Recovery deadline
+            output: default
+        config:
+          key: !expr outputs.normalizeIncident.event.id
+          collection: mayday-attempts
+    errorHandler: Catch orchestration errors
+  - name: Record failed recovery
+    description: Record a terminal failure or timeout; keep a prior terminal outcome unchanged.
+    type:
+      coreBlock: memorySet
+    position: [1300, 3980]
+    inputs:
+      default:
+        links:
+          - block: Catch orchestration errors
+            output: default
+          - block: Run finished successfully
+            output: else
+          - block: Still awaiting recovery
+            output: then
+          - block: Verification deadline reached
+            output: then
+        config:
+          key: !expr Object(outputs).normalizeIncident.event.id
+          collection: mayday-attempts
+          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`failed`,incident:Object(outputs).normalizeIncident.event.incident,run:Object(outputs).captureRunResult || null,reason:Object(outputs).catchOrchestrationErrors?.error?.message || (Object(outputs).captureRunResult?.state && Object(outputs).captureRunResult.state !== `FINISHED` ? `Spacelift run ended: ${Object(outputs).captureRunResult.state}` : `Recovery or verification timed out`),at:Date.now()})'
+          ttl: 86400
+  - name: Record recovery attempt
+    description: Record a start marker before external side effects; ambiguous failures do not automatically repeat a repair.
+    type:
+      coreBlock: memorySet
+    position: [600, 1800]
+    inputs:
+      default:
+        links:
+          - block: New incident
+            output: then
+        config:
+          key: !expr outputs.normalizeIncident.event.id
+          collection: mayday-attempts
+          value: !expr ({status:`starting`,incident:outputs.normalizeIncident.event.incident,since:outputs.normalizeIncident.since,deadline:outputs.normalizeIncident.deadline})
+          ttl: 86400
+    errorHandler: Catch orchestration errors
+  - name: Record verified recovery
+    description: Record success only after independent monitor evidence confirms recovery.
+    type:
+      coreBlock: memorySet
+    position: [2000, 3620]
+    inputs:
+      default:
+        links:
+          - block: Recovery verified
+            output: then
+        config:
+          key: !expr outputs.normalizeIncident.event.id
+          collection: mayday-attempts
+          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`recovered`,incident:outputs.normalizeIncident.event.incident,run:outputs.captureRunResult,observation:Object(outputs).readIndependentObservation.value.observation,at:Date.now()})'
+          ttl: 86400
+    errorHandler: Catch orchestration errors
+  - name: Recovery deadline
+    description: A separate ten-minute timer covers runs that remain queued or await confirmation.
+    type:
+      coreBlock: sleep
+    position: [600, 2900]
+    inputs:
+      default:
+        links:
+          - block: Record recovery attempt
+            output: default
+        config:
+          sleep: 600
+    errorHandler: Catch orchestration errors
+  - name: Recovery verified
+    description: Require matching incident, fresh healthy observation, completed requests, no errors, and acceptable latency.
+    type:
+      coreBlock: condition
+    position: [1650, 3440]
+    inputs:
+      default:
+        links:
+          - block: Read independent observation
+            output: default
+        config:
+          condition: !expr |-
+            (() => {
+            const e=Object(outputs).readIndependentObservation.value;
+            const n=outputs.normalizeIncident;
+            if(!e || e.incident?.id!==n.event.incident.id || e.incident?.status!=="recovered") return false;
+            const o=e.observation, at=Date.parse(o?.at), now=Date.now();
+            return now<n.deadline && Number.isFinite(at) && at>=n.since && now-at<15000 && at<=now+5000 && o.reachable && o.health?.status==="healthy" && o.samples>0 && o.errors===0 && o.latency_ms<=600;
+            })()
+    errorHandler: Catch orchestration errors
+  - name: Reject invalid event
+    description: Return HTTP 400 for malformed or unsupported events.
+    type:
+      coreBlock: transform
+    position: [280, 360]
+    inputs:
+      default:
+        links:
+          - block: Validate observation
+            output: else
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr ({status:400,body:{error:`Invalid Mayday event`}})
+  - name: Reject unauthorized
+    description: Return HTTP 401 without dispatching a repair.
+    type:
+      coreBlock: transform
+    position: [280, 180]
+    inputs:
+      default:
+        links:
+          - block: Authenticate monitor
+            output: else
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr ({status:401,body:{error:`Unauthorized`}})
+  - name: Remember delivery
+    description: Persist acceptance before dispatch. Retrying recovery requires a new event ID.
+    type:
+      coreBlock: memorySet
+    position: [600, 1440]
+    inputs:
+      default:
+        links:
+          - block: Store observation
+            output: default
+        config:
+          key: !expr outputs.normalizeIncident.event.id
+          collection: mayday-deliveries
+          value: !expr ({status:`accepted`,at:Date.now()})
+          ttl: 86400
+    errorHandler: Catch intake errors
+  - name: Restart service with Ansible
+    description: Native Trigger Run on mayday-service; completion still requires independent health verification.
+    type:
+      coreBlock: spacelift
+      kind: triggerRun
+    position: [950, 2460]
+    inputs:
+      trigger:
+        links:
+          - block: Service outage
+            output: then
+        config:
+          runType: !expr '`TRACKED`'
+          stackId: !expr '`mayday-service`'
+    errorHandler: Catch orchestration errors
+  - name: Retry observation later
+    type:
+      coreBlock: transform
+    position: [950, 1080]
+    inputs:
+      default:
+        links:
+          - block: Catch intake errors
+            output: default
+        config: {}
+    outputs:
+      default:
+        outputCustomization: !expr |-
+          ({status:503,body:{error:"Please retry observation"}})
+  - name: Run finished successfully
+    description: A failed or canceled run is a failed recovery, not proof of health.
+    type:
+      coreBlock: condition
+    position: [1300, 2900]
+    inputs:
+      default:
+        links:
+          - block: Capture run result
+            output: default
+        config:
+          condition: !expr outputs.captureRunResult.state === `FINISHED`
+    errorHandler: Catch orchestration errors
+  - name: Serialize event intake
+    description: Serialize intake by event ID so duplicate deliveries cannot start two repairs.
+    type:
+      coreBlock: concurrencyGroup
+    position: [600, 720]
+    inputs:
+      acquire:
+        links:
+          - block: Normalize incident
+            output: default
+        config:
+          groupKey: !expr outputs.normalizeIncident.event.id
+          itemKey: !expr outputs.monitorWebhook.requestId
+      release:
+        links:
+          - block: Acknowledge duplicate
+            output: default
+          - block: Catch intake errors
+            output: default
+          - block: Remember delivery
+            output: default
+        config:
+          groupKey: !expr Object(outputs).normalizeIncident.event.id
+          itemKey: !expr Object(outputs).monitorWebhook.requestId
+  - name: Service outage
+    description: Restart the service through its existing Ansible stack.
+    type:
+      coreBlock: condition
+    position: [950, 2100]
+    inputs:
+      default:
+        links:
+          - block: Missing dependency
+            output: else
+        config:
+          condition: !expr outputs.normalizeIncident.event.incident.kind === `outage`
+    errorHandler: Catch orchestration errors
+  - name: Set baseline capacity
+    description: Reset persists WORKERS=2 before deployment.
+    type:
+      coreBlock: spacelift
+      kind: graphql
+    position: [2000, 2280]
+    config:
+      query: 'mutation SetMaydayWorkers($stack: ID!, $config: ConfigInput!) { stackConfigAdd(stack:$stack, config:$config) { id } }'
+    inputs:
+      request:
+        links:
+          - block: Capacity decrease
+            output: else
+        config:
+          variables.config: !expr |-
+            ({id:"WORKERS",type:"ENVIRONMENT_VARIABLE",value:"2",writeOnly:false})
+          variables.stack: mayday-service
+    errorHandler: Catch orchestration errors
+  - name: Set eight workers
+    description: Persist WORKERS=8 on mayday-service before running Ansible.
+    type:
+      coreBlock: spacelift
+      kind: graphql
+    position: [1300, 2280]
+    config:
+      query: 'mutation SetMaydayWorkers($stack: ID!, $config: ConfigInput!) { stackConfigAdd(stack:$stack, config:$config) { id } }'
+    inputs:
+      request:
+        links:
+          - block: Capacity increase
+            output: then
+        config:
+          variables.config: !expr |-
+            ({id:"WORKERS",type:"ENVIRONMENT_VARIABLE",value:"8",writeOnly:false})
+          variables.stack: mayday-service
+    errorHandler: Catch orchestration errors
+  - name: Set two workers
+    description: Persist WORKERS=2 on mayday-service before running Ansible.
+    type:
+      coreBlock: spacelift
+      kind: graphql
+    position: [1650, 2280]
+    config:
+      query: 'mutation SetMaydayWorkers($stack: ID!, $config: ConfigInput!) { stackConfigAdd(stack:$stack, config:$config) { id } }'
+    inputs:
+      request:
+        links:
+          - block: Capacity decrease
+            output: then
+        config:
+          variables.config: !expr |-
+            ({id:"WORKERS",type:"ENVIRONMENT_VARIABLE",value:"2",writeOnly:false})
+          variables.stack: mayday-service
+    errorHandler: Catch orchestration errors
+  - name: Still awaiting recovery
+    description: Only a still-starting attempt is marked timed out.
+    type:
+      coreBlock: condition
+    position: [600, 3260]
+    inputs:
+      default:
+        links:
+          - block: Read recovery outcome
+            output: default
+        config:
+          condition: !expr outputs.readRecoveryOutcome.found && outputs.readRecoveryOutcome.value.status === `starting`
+    errorHandler: Catch orchestration errors
+  - name: Store observation
+    description: Store the newest observation per incident. Older deliveries cannot replace newer health evidence.
+    type:
+      coreBlock: memorySet
+    position: !blockUnits [6, 9]
+    inputs:
+      default:
+        links:
+          - block: First delivery
+            output: then
+        config:
+          key: !expr outputs.normalizeIncident.event.incident?.id || `baseline`
+          collection: mayday-observations
+          value: !expr '!stored || Date.parse(Object(stored).at) <= Date.parse(outputs.normalizeIncident.event.at) ? outputs.normalizeIncident.event : stored'
+          ttl: 600
+    errorHandler: Catch intake errors
+  - name: Validate observation
+    description: Validate the Mayday event envelope, incident kind, and measured health fields.
+    type:
+      coreBlock: condition
+    position: [600, 360]
+    inputs:
+      default:
+        links:
+          - block: Authenticate monitor
+            output: then
+        config:
+          condition: !expr |-
+            (() => {
+            const e=outputs.monitorWebhook.body;
+            if (!e || typeof e !== "object" || !/^[a-f0-9]{24}$/.test(e.id) || e.service !== "mayday" || !Number.isFinite(Date.parse(e.at))) return false;
+            if (!["observation","incident.opened","incident.recovered","incident.failed"].includes(e.type)) return false;
+            const o=e.observation;
+            if (!o || typeof o.reachable !== "boolean" || !Number.isFinite(Date.parse(o.at)) || !Number.isSafeInteger(o.samples) || o.samples<0 || !Number.isSafeInteger(o.errors) || o.errors<0 || o.errors>o.samples || !Number.isFinite(o.latency_ms) || o.latency_ms<0 || !o.health || typeof o.health.status !== "string" || !Number.isSafeInteger(o.health.workers)) return false;
+            if(e.incident && (!/^[a-f0-9]{24}$/.test(e.incident.id) || !["outage","dependency","capacity_up","capacity_down","reset"].includes(e.incident.kind) || !["open","recovering","recovered","failed"].includes(e.incident.status))) return false;
+            return !e.type.startsWith("incident.") || Boolean(e.incident);
+            })()
+  - name: Verification deadline reached
+    description: Bound the wait for health evidence to ten minutes from receipt.
+    type:
+      coreBlock: condition
+    position: [1650, 3620]
+    inputs:
+      default:
+        links:
+          - block: Recovery verified
+            output: else
+        config:
+          condition: !expr Date.now() >= outputs.normalizeIncident.deadline
+    errorHandler: Catch orchestration errors
+  - name: Wait for next observation
+    description: Wait five seconds before checking the monitor evidence again.
+    type:
+      coreBlock: sleep
+    position: [1650, 3800]
+    inputs:
+      default:
+        links:
+          - block: Verification deadline reached
+            output: else
+        config:
+          sleep: 5
+    errorHandler: Catch orchestration errors
+notes:
+  - body: |-
+      # 1 · Receive and authenticate
+      The Mayday monitor observes the private EC2 service from EKS. HTTP receives its bearer-token-authenticated events; native conditions validate them, Memory deduplicates deliveries, and only new incidents trigger action.
+
+      Observation and recovery events refresh the evidence used below.
+    position: !blockUnits [13, 0]
+    style:
+      width: 460
+      height: 300
+      color: '#172554'
+  - body: |-
+      # 2 · Choose the recovery
+      Follow the incident branch: collect diagnostics, restart the service, scale to eight workers, scale to two, or restore baseline.
+
+      Built-in Spacelift GraphQL sets WORKERS. Trigger Run deploys the existing Ansible stack on the EC2 worker pool. Completion comes back as an event.
+    position: [50, 2100]
+    style:
+      width: 460
+      height: 300
+      color: '#0f172a'
+  - body: |-
+      # 3 · Prove recovery
+      A successful run proceeds to independent monitor evidence. We require a fresh, healthy observation with traffic and no errors for the same recovered incident.
+
+      Poll every five seconds, up to ten minutes. Run failures, orchestration errors, and timeouts converge on a failed outcome.
+    position: [2027, 2900]
+    style:
+      width: 460
+      height: 300
+      color: '#0f172a'
+  - body: |-
+      # Human investigation · Intelligence + Intent
+      A missing license triggers diagnostics, then pauses at evidence ready. Use Intelligence to investigate the stack evidence and Intent to restore the license.
+
+      The Flow does not silently recreate the dependency. The monitor independently observes the repair.
+    position: [50, 3470]
+    style:
+      width: 460
+      height: 300
+      color: '#3b0764'

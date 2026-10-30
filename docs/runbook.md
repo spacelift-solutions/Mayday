@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Spacelift solutions account access, an authenticated `spacectl` solutions profile, and the existing AWS cloud integration.
-- Shared EKS cluster with Pod Identity, EBS CSI, a default storage class, and the existing EC2 worker pool.
+- Shared EKS cluster with Pod Identity, EBS CSI, the `gp2` storage class, and the existing EC2 worker pool.
 - Flux bootstrapped from `spacelift-solutions/flux`, with its dedicated SOPS KMS key and controller decryption permissions applied.
 - An AWS author session with encryption/decryption access to that key, plus SOPS, Flux CLI 2.9.6, and kubeconform 0.8.0.
 - A Flows project on `useflows.eu`, a valid `FLOWS_TOKEN`, and `flowctl`.
@@ -20,7 +20,7 @@
    The monitor's pull Secret is `kubernetes/ghcr.sops.yaml` and reconciles with its workload.
    Record the runtime image digest from the publishing workflow.
 2. Apply the companion `demo/admin` change.
-   It creates four stacks, the SSH context, scoped Flows API key, and Intent policy.
+   It creates four stacks, the SSH context, scoped Flows project access, and Intent policy.
    The public key is mounted at `/mnt/workspace/mayday.pub` for OpenTofu; the private key is mounted separately for Ansible.
    The idempotent GraphQL bootstrap creates the Intent project and attaches its policy before its existing AWS integration.
 3. Run `mayday-infrastructure`.
@@ -28,7 +28,8 @@
    The pinned Tofusible host module produces `inventory_tofu`, which triggers `mayday-service` through `TOFUSIBLE_INVENTORY`.
    Mayday passes only host metadata and an SSH key path to the module, so its output is explicitly nonsensitive and needs no private-worker sensitive-output upload setting.
 4. In the **Mayday license** Intent project, create `license/demo-license.json` in the infrastructure stack's `license_bucket` output.
-   Use resource type `aws_s3_object`, `server_side_encryption = "AES256"`, a private ACL, and the exact content from `demo-license.json`.
+   Use resource type `aws_s3_object`, `server_side_encryption = "AES256"`, `acl = ""`, and the exact content from `demo-license.json`.
+   The bucket uses `BucketOwnerEnforced` ownership and blocks public access; leave the ACL empty because S3 disables object ACLs for this bucket.
    Intent exclusively owns this object.
 5. Create or edit `kubernetes/control.sops.yaml` with `AWS_PROFILE=demo sops edit kubernetes/control.sops.yaml`.
    It is a Kubernetes Secret named `mayday-control` in namespace `mayday`, with `stringData.DEMO_PASSWORD` and `stringData.FLOWS_WEBHOOK_TOKEN`.
@@ -37,11 +38,14 @@
    Commit only the encrypted file; use SOPS for subsequent edits.
 6. Set `TF_VAR_webhook_token` on `mayday-flows` as a write-only environment variable, using the same webhook token from the encrypted Secret.
    The admin module leaves this variable under operator control.
-7. Publish the custom app with `flowctl app create`, `flowctl version create -e flows/app/main.ts`, and `flowctl version publish` in the Mayday Flows project.
-   Set `TF_VAR_project_id` and `TF_VAR_app_version_id` on `mayday-flows`, then run/confirm it.
+7. Run/confirm `mayday-flows` after the admin apply.
+   Admin supplies `TF_VAR_project_id` and the project-scoped `FLOWS_TOKEN` deployment credential.
+   This stack manages `MAYDAY_WEBHOOK_TOKEN` as a project secret and imports the native definition from `flows/recovery.yaml`.
+   No custom app, published app version, or Spacelift recovery API key is required.
+   For the existing live deployment, follow the migration instructions below before confirming the first apply.
 8. Edit `kubernetes/configmap.yaml` using the infrastructure stack's outputs.
    Set `TARGET_URL` from `target_url`, `TARGET_INSTANCE_ID` from `instance_id`, and verify the region, bucket, license key, and stop document name match their outputs.
-   Set `FLOWS_WEBHOOK_URL` to the **Observe Mayday** block's HTTP endpoint.
+   Set `FLOWS_WEBHOOK_URL` to the **Monitor webhook** block's HTTP endpoint.
    In `kubernetes/monitor.yaml`, replace the `unconfigured` image with the published `ghcr.io/spacelift-solutions/mayday@sha256:...` digest.
 9. Run `make manifests-check PYTHON=.venv/bin/python` and merge the complete manifests into Mayday.
    In the Flux repository, change `clusters/spacelift-solutions/mayday/workload.yaml` to `suspend: false` and merge after review.
@@ -67,6 +71,17 @@ kubectl -n mayday rollout status deployment/mayday-monitor
 ```
 
 ## Authentication
+
+### Native Flow access
+
+The Mayday Flows project uses the `Mayday recovery` role in its Operations space: `SPACE_READ`, `RUN_TRIGGER`, and `STACK_ADD_CONFIG`.
+The native blocks use project access to trigger `mayday-service` / `mayday-diagnostics` and update the service's `WORKERS` input.
+They do not exchange a Spacelift API key.
+`FLOWS_TOKEN` remains necessary for the OpenTofu deployment stack; it is a separate credential used to manage the Flow.
+
+The HTTP endpoint authenticates the monitor with `secrets.MAYDAY_WEBHOOK_TOKEN` and redacts the authorization header in events.
+The Flow stack uses OpenTofu 1.13.1 because the provider's secret value is write-only (requires 1.11+). The token variable is also ephemeral, keeping it out of saved plans.
+Provider 0.7.0 has no secret revision argument, so changing the variable alone does not schedule an update. To rotate, update `MAYDAY_WEBHOOK_TOKEN` in the Flows project, the write-only `TF_VAR_webhook_token`, and the encrypted Kubernetes Secret to the same value; then restart the monitor after Flux reconciles the Secret. Do not replace the secret resource merely to rotate it.
 
 ### Private image pulls
 
@@ -101,6 +116,37 @@ If the dashboard is exposed through HTTPS, set `SESSION_COOKIE_SECURE=true` on t
 The outbound Flows webhook still uses its separate shared token.
 
 ## Bootstrap and ownership
+
+### Adopt the native Flow reviewed live
+
+The Flow is already enabled in project `01a18e62-7f44-7168-9a2f-a420c435d1b0` with ID `01a18e9c-62ac-7af4-9176-1a00ddbd5f2a`.
+The export preserves the reviewed block names, layout, notes, links, and webhook path.
+Keep the resource address `flows_flow.recovery`: it already owns this Flow in the `mayday-flows` stack state.
+
+1. Merge this Mayday change before applying the companion admin change, so any new Flow run uses the native definition.
+2. Apply the companion admin change. Its idempotent access bootstrap recognizes the existing scoped project binding; it also upgrades only the Flow stack to OpenTofu 1.13.1 and removes the retired Spacelift recovery API key and its environment variables.
+3. Plan `mayday-flows`. `flows/deploy/imports.tf` adopts the existing project secret without rewriting its value. The old app installation, six config fields, and confirmation are retired.
+4. Confirm only after the plan preserves the Flow ID, native blocks, and webhook path. No target infrastructure or service changes belong in this migration.
+5. Remove the obsolete operator-set `TF_VAR_app_version_id` variable from `mayday-flows`. The published custom app can be archived after its installation is removed.
+6. Merge the prepared Flux unsuspend change after the monitor image and runtime settings are ready, then rehearse all five incident paths.
+
+The one-time import targets the secret created during review. Omit `imports.tf` when bootstrapping a different project, so OpenTofu creates a new project secret.
+The administrative project-access bootstrap is temporary until the provider releases `spacelift_role_attachment.flows_project_id`; it does not delete bindings on destroy.
+Revoke project access explicitly before deleting its role, and use a native imported role attachment when support ships.
+
+### Keep canvas and code in sync
+
+After reviewing live canvas edits, export the complete definition:
+
+```sh
+flowctl flow export --id 01a18e9c-62ac-7af4-9176-1a00ddbd5f2a --file flows/recovery.yaml
+make flows-check PYTHON=.venv/bin/python
+```
+
+Review the exported diff before applying the stack. An apply can overwrite unexported canvas changes.
+Do not rename blocks casually: the provider matches them by name. Keep the HTTP path stable so the monitor does not lose its endpoint.
+
+### Monitor bootstrap
 
 The Flux child starts suspended because the initial review precedes infrastructure provisioning, image publication, and webhook creation.
 Before resuming it, fill the empty runtime values, commit the encrypted Secret, and pin the published image digest.
@@ -167,8 +213,12 @@ Reset also returns load and capacity to the baseline; it is available only after
 - The monitor uses a persistent volume for incident history and webhook outbox.
   Failed deliveries are retried; pending telemetry snapshots are coalesced.
 - Webhooks require a shared token.
-  Incident event IDs are deduplicated by the custom app.
-  The repair block records an attempt before calling Spacelift so an ambiguous API failure does not automatically launch another repair.
+  A native concurrency group and Memory blocks deduplicate event IDs for 24 hours.
+  The Flow records delivery acceptance and a recovery attempt before calling Spacelift, so retrying delivery after an ambiguous failure does not automatically launch another repair.
+  Intake failures release the lock and return HTTP 503; valid events and duplicates return 202.
+- Native Trigger Run completion is checked for `FINISHED`, then the Flow polls independent monitor evidence every five seconds with a ten-minute deadline.
+  A failed run or orchestration error records a failed outcome. A successful diagnostic run records `evidence_ready` for the human Intelligence/Intent handoff.
+  The dashboard's five-minute incident timer remains independent; inspect ongoing runs before explicitly retrying.
 - Investigate a timed-out incident before clicking **Retry failed recovery**.
   Check for a still-running Spacelift run first.
   Retrying creates a new event ID for the same incident; it is an explicit new attempt.
@@ -195,5 +245,5 @@ Remove the Intent object through an authorized administrative cleanup process, t
 The namespace and PVC opt out of Flux pruning to preserve incident history; explicitly delete them after deciding whether to retain that data.
 The bucket is not force-destroyed.
 The Intent GraphQL bootstrap intentionally has no destroy action; its project and history need an explicit retention/cleanup decision.
-Delete the app/Flow before revoking its API key.
+Delete the Flow and project secret, and revoke its project role binding before deleting the recovery role or revoking the Flows deployment credential.
 Do not remove the shared EKS cluster or workers.
