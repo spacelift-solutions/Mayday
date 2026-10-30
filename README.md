@@ -72,7 +72,9 @@ A five-minute monitor timeout leaves the incident visibly failed, with an explic
 
 Follow [the deployment and demo runbook](docs/runbook.md).
 Slow infrastructure is provisioned before the live incident walkthrough.
-Images are published to GHCR by the main-branch workflow; make both packages public for unauthenticated cluster/worker pulls, or configure image-pull credentials.
+Images are published privately to GHCR by the main-branch workflow.
+The monitor and EKS workers use namespace-local `mayday-ghcr` pull Secrets, encrypted with SOPS in their respective GitOps sources.
+See the runbook for deployment order and credential rotation.
 
 ## Development checks
 

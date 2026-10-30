@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: mayday-ghcr
+    namespace: mayday
+    labels:
+        app.kubernetes.io/part-of: mayday
+type: kubernetes.io/dockerconfigjson
+stringData:
+    .dockerconfigjson: ENC[AES256_GCM,data:Su2JILbpyGRRoFWp88J/bldm2bcxAIwm5Jipv2qgePX21W6yGVdYSj4dW1qS2QRXO7YswSdO2BU8cpKmJNtJ7HVctjyAwQQ6XsWJ/ghPlFS+MRf6QIaLhvnXRk1FfcOw93L1U59WUK+VNPXPqQ69gtt+YgvB,iv:I+5vnA7x+ACxkJp8LF8rCyiMIc9YSoJvy5aysVWlUP8=,tag:abTFyduv8GPdGj8OeYx0Yg==,type:str]
+sops:
+    encrypted_regex: ^(data|stringData)$
+    kms:
+        - arn: arn:aws:kms:us-east-1:234878555361:alias/flux-sops-spacelift-solutions-cluster
+          aws_profile: ""
+          created_at: "2026-10-30T20:22:51Z"
+          enc: AQICAHi7UM/XY4YN3CfjkcIIzn/vGeSn6SSLexHKvaCeODByCwFIT2EyMTtE6i8+uaFDVwKcAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQM5rm09pniWLAtVCjmAgEQgDuhZrOJ3VMcfmMh7Udz/4EMZHqCenx5XFtZvMuJsh18iTvH/dQfPNLjKsspgj/1LMiacX6ZF8j4ARRS5A==
+    lastmodified: "2026-10-30T20:22:53Z"
+    mac: ENC[AES256_GCM,data:NG+zxJYSc7kaGV4k6AwOIXRyUTCIy2N0FI53kOgobDNJ/xigN+I9qTar4saZNQCHgpLehBr+LyOOLAYM4JwdNZQ15qtJuSQHvlYJ/wH5t1lPoCi+G6PX3P/kU26REwvyIcC/4NmKpsfVyy66fWfUEKAjSR4xG1cfS3lUv1j7/Zw=,iv:SR84a0R40tWUvsqfM6jDz0bIHXTMFLeUlAsX0Eo2z5I=,tag:oaPSnanRbFVhSLrJ4hcpgw==,type:str]
+    version: 3.13.3

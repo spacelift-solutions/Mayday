@@ -13,7 +13,10 @@
 
 1. Merge the reviewed Mayday code and publish both images.
    CI compiles the Linux binary with Go caching and copies the artifact into the runtime image.
-   Make the GHCR packages public or configure private image-pull authentication.
+   Keep the GHCR packages private.
+   Reconcile the worker pull Secret from `flux/clusters/spacelift-solutions/platform/spacelift-workers/ghcr.sops.yaml`, then apply `demo/worker-pools/kubernetes/aws` through `worker-pool-on-eks`.
+   Verify the EKS worker pool has registered workers before running Mayday stacks.
+   The monitor's pull Secret is `kubernetes/ghcr.sops.yaml` and reconciles with its workload.
    Record the runtime image digest from the publishing workflow.
 2. Apply the companion `demo/admin` change.
    It creates four stacks, the SSH context, scoped Flows API key, and Intent policy.
@@ -62,6 +65,23 @@ kubectl -n mayday rollout status deployment/mayday-monitor
 ```
 
 ## Authentication
+
+### Private image pulls
+
+Both images use a dedicated GitHub classic PAT with only `read:packages`, authorized for the organization and with read access to both packages.
+The source credential is stored in the vault at `/work/ghcr/mayday-pull-token`.
+Each namespace has its own `mayday-ghcr` Secret of type `kubernetes.io/dockerconfigjson`: `mayday` for the monitor and `spacelift-worker-controller-system` for worker run pods.
+The monitor Deployment and the OpenTofu-managed WorkerPool reference these Secrets through `imagePullSecrets`.
+Setting a stack environment variable would be too late to authenticate the runner image pull.
+
+To rotate, replace the vault token and update `.dockerconfigjson` in both SOPS files using the repository encryption rules.
+Keep plaintext out of Git and command arguments.
+Validate both repositories and merge both encrypted updates.
+Wait for Flux to reconcile them, verify a fresh pull in each namespace, then revoke the old token.
+The controller, worker pool and pool registration credentials remain owned by `demo/worker-pools/kubernetes/aws`; Flux owns only the worker registry Secret.
+The monitor remains suspended until its runtime configuration and image digest are ready.
+
+### Dashboard access
 
 The demo password is exchanged for an HttpOnly, SameSite=Strict session cookie valid for eight hours.
 Sign out revokes that session; a monitor restart invalidates all sessions.
