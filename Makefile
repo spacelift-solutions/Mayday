@@ -26,9 +26,7 @@ smoke:
 	python3 scripts/smoke.py
 
 flows-check:
-	npm --prefix flows/app ci
-	npm --prefix flows/app run check
-	npm --prefix flows/app test
+	PYTHON=$(PYTHON) node --test flows/test/*.test.mjs
 
 check: test flows-check
 	test -z "$$(gofmt -l cmd internal)"

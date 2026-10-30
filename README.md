@@ -40,8 +40,8 @@ Local mode deliberately does not fake Flows, Intent, or SSM: cloud repair contro
 | `infra/target` | EC2, private S3 bucket, SSM stop document, and scoped AWS identities |
 | `ansible` | Tofusible-compatible inventory, deployment/repair, and diagnostic evidence |
 | `kubernetes` | Plain Kubernetes manifests and the SOPS-encrypted monitor Secret |
-| `flows/app` | Custom Flows app: observed events, bounded Spacelift repairs, and independent verification |
-| `flows/deploy`, `flows/recovery.yaml` | App installation and the recovery workflow |
+| `flows/recovery.yaml` | Exported native Flow: HTTP intake, incident branches, Spacelift runs, and independent verification |
+| `flows/deploy`, `flows/test` | Flow/secret deployment and tests of the exported expressions and routing |
 
 Spacelift spaces, stacks, dependencies, credentials, and the Intent policy are managed in `spacelift-solutions/demo`, under `admin/modules/mayday`.
 Flux reconciles the monitor and its namespace from this repository.
@@ -82,7 +82,7 @@ See the runbook for deployment order and credential rotation.
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-make check PYTHON=.venv/bin/python       # Go race tests/vet, TypeScript tests/typecheck, formatting
+make check PYTHON=.venv/bin/python       # Go race tests/vet, native Flow tests, formatting
 make smoke       # approximately two minutes of real HTTP failures and recovery
 make build
 make manifests-check PYTHON=.venv/bin/python
@@ -95,13 +95,9 @@ Install Flux CLI 2.9.6 and kubeconform 0.8.0 for manifest checks.
 Flux discovers the manifests directly; there are no `kustomization.yaml` files.
 CI compiles the Linux artifact with Go caching, then copies it into the runtime image.
 There is no custom runner image or Go installation on the workers.
-The custom app can be bundled locally with:
-
-```sh
-cd flows/app
-npm ci
-flowctl version bundle -e main.ts -o /tmp/mayday-flows-app.tar.gz
-```
+The Flow uses built-in HTTP, Spacelift Trigger Run/GraphQL, and core blocks; no custom app is published or installed.
+`make flows-check` executes the JavaScript expressions from the exported YAML and checks incident routing, authentication, duplicate handling, and recovery evidence. Node.js is only needed for these local/CI tests.
+See the runbook for exporting canvas changes and adopting the reviewed live deployment.
 
 No local check proves cloud IAM, cluster connectivity, Flows delivery, or Intent recreation of an externally deleted object.
 Rehearse those with the runbook in the live account before presenting.

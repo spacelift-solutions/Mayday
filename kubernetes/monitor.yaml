@@ -14,6 +14,7 @@ metadata:
     kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   accessModes: [ReadWriteOnce]
+  storageClassName: gp2
   resources:
     requests:
       storage: 1Gi
@@ -48,7 +49,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: monitor
-          image: ghcr.io/spacelift-solutions/mayday:unconfigured
+          image: ghcr.io/spacelift-solutions/mayday@sha256:fa20ddf17caf552c1488888fe302860688ad43059d0a9eb2e7d41e59416ed756
           args: [monitor]
           ports:
             - name: http

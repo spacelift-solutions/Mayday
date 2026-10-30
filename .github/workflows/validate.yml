@@ -16,8 +16,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: flows/app/package-lock.json
       - uses: opentofu/setup-opentofu@v1
       - uses: actions/setup-python@v5
         with:
@@ -46,6 +44,7 @@ jobs:
           docker build --platform linux/amd64 -t mayday:test .
       - name: Check Ansible with the standard AWS runner
         run: |
+          # Official mirror avoids ECR Public download limits in CI.
           docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace/ansible \
-            public.ecr.aws/spacelift/runner-ansible@sha256:c4edf84de69474657ca1376976bae7ec6c2d5fbb2074cce1bdae673bc99aaa88 \
+            ghcr.io/spacelift-io/runner-ansible@sha256:c4edf84de69474657ca1376976bae7ec6c2d5fbb2074cce1bdae673bc99aaa88 \
             sh -c 'python3 -m unittest discover -s tests && ansible-playbook --syntax-check -i localhost, playbook.yml && ansible-playbook --syntax-check -i localhost, diagnose.yml'
