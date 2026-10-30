@@ -1,0 +1,36 @@
+---
+- name: Gather Mayday evidence for Infra Assistant
+  hosts: mayday
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read systemd service state
+      ansible.builtin.command: systemctl status mayday --no-pager
+      register: service_state
+      failed_when: false
+      changed_when: false
+      check_mode: false
+    - name: Read recent service logs
+      ansible.builtin.command: journalctl -u mayday -n 30 --no-pager
+      register: service_logs
+      changed_when: false
+      check_mode: false
+    - name: Collect the dependency and capacity snapshot
+      ansible.builtin.command: /usr/local/bin/mayday diagnose
+      environment:
+        TARGET_URL: http://127.0.0.1:8081
+      register: diagnosis
+      failed_when: false
+      changed_when: false
+      check_mode: false
+    - name: Show observed evidence
+      ansible.builtin.debug:
+        msg:
+          - "{{ service_state.stdout_lines }}"
+          - "{{ service_logs.stdout_lines }}"
+          - "{{ diagnosis.stdout_lines }}"
+          - "{{ diagnosis.stderr_lines }}"
+    - name: Mark an unhealthy diagnostic run as failed
+      ansible.builtin.assert:
+        that: diagnosis.rc == 0
+        fail_msg: The service is unhealthy. Investigate the observed evidence above.

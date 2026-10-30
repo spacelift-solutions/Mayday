@@ -1,0 +1,4 @@
+creation_rules:
+  - path_regex: ^kubernetes/.*\.sops\.ya?ml$
+    encrypted_regex: ^(data|stringData)$
+    kms: arn:aws:kms:us-east-1:234878555361:alias/flux-sops-spacelift-solutions-cluster

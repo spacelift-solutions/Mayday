@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mayday · Mission Control</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a class="brand" href="/">M<span class="signal">▲</span>YDAY</a
+        ><span class="eyebrow">MISSION CONTROL / SPACELIFT</span
+        ><span id="connection" class="pill">SIGNED OUT</span
+        ><button id="logout" hidden>Sign out</button>
+      </header>
+      <section id="login-panel" class="login-panel">
+        <h1>Sign in</h1>
+        <form id="login">
+          <label for="password">Demo password</label>
+          <input
+            type="password"
+            id="password"
+            autocomplete="current-password"
+            required
+          />
+          <button type="submit">Sign in</button>
+          <p id="login-error" role="alert"></p>
+        </form>
+      </section>
+      <div id="workspace" hidden>
+        <p id="message" role="status"></p>
+        <section class="metrics" aria-label="Live service metrics">
+          <article>
+            <p>SERVICE</p>
+            <strong id="health">Unknown</strong
+            ><small id="license">Awaiting telemetry</small>
+          </article>
+          <article>
+            <p>TRAFFIC</p>
+            <strong><span id="rate">0</span><em>req/s</em></strong
+            ><small>Synthetic I/O workload</small>
+          </article>
+          <article>
+            <p>AVERAGE LATENCY</p>
+            <strong><span id="latency">0</span><em>ms</em></strong
+            ><small>Measured request duration</small>
+          </article>
+          <article>
+            <p>ERROR RATE</p>
+            <strong id="errors">0%</strong
+            ><small id="workers">0 active workers</small>
+          </article>
+        </section>
+        <div class="columns">
+          <section class="panel">
+            <div class="section-title">
+              <h2>Fault controls</h2>
+            </div>
+            <button class="fault" data-action="outage">
+              <span class="icon">⏻</span
+              ><span
+                ><b>Cause outage</b
+                ><small
+                  >Stop the EC2 service. Watch Ansible recover it.</small
+                ></span
+              ><span>↗</span></button
+            ><button class="fault" data-action="license">
+              <span class="icon">⌁</span
+              ><span
+                ><b>Remove license file</b
+                ><small
+                  >Delete the S3 dependency. Investigate with
+                  Intelligence.</small
+                ></span
+              ><span>↗</span>
+            </button>
+            <div class="load">
+              <div>
+                <b>Traffic</b>
+              </div>
+              <div class="load-buttons" role="group" aria-label="Traffic level">
+                <button data-rate="2" aria-pressed="false">
+                  Light<small>2 req/s</small>
+                </button>
+                <button data-rate="8" aria-pressed="false">
+                  Medium<small>8 req/s</small>
+                </button>
+                <button data-rate="22" aria-pressed="false">
+                  Heavy<small>22 req/s</small>
+                </button>
+              </div>
+            </div>
+            <div class="actions">
+              <button id="reset">Reset demo</button
+              ><button id="retry">Retry failed recovery</button>
+            </div>
+            <p class="hint">
+              One incident at a time. Reset restores baseline load and service
+              configuration; a missing license is restored through Intent.
+            </p>
+          </section>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Incident room</h2>
+              <span id="incident-status" class="pill">STANDING BY</span>
+            </div>
+            <h3 id="incident-title">No active incident</h3>
+
+            <dl>
+              <dt>Incident ID</dt>
+              <dd id="incident-id">—</dd>
+              <dt>Observed at</dt>
+              <dd id="observed">—</dd>
+              <dt>Queued requests</dt>
+              <dd id="queue">0</dd>
+            </dl>
+            <p id="delivery" role="alert"></p>
+            <div class="investigate">
+              <span class="eyebrow">START THE CONVERSATION</span>
+              <blockquote>“What’s happening with this service?”</blockquote>
+              <a id="stack-link" target="_blank" rel="noopener"
+                >Open the service in Spacelift ↗</a
+              >
+            </div>
+          </section>
+        </div>
+        <section class="panel timeline-panel">
+          <div class="section-title">
+            <h2>Live timeline</h2>
+            <span class="eyebrow">FAULT → DETECTION → RECOVERY</span>
+          </div>
+          <ol id="timeline">
+            <li>Connect to begin receiving events.</li>
+          </ol>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

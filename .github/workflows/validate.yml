@@ -1,0 +1,48 @@
+name: Validate Mayday
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: flows/app/package-lock.json
+      - uses: opentofu/setup-opentofu@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python3 -m pip install -r requirements-dev.txt
+      - name: Install manifest validators
+        run: |
+          curl -fsSL https://github.com/fluxcd/flux2/releases/download/v2.9.6/flux_2.9.6_linux_amd64.tar.gz -o "${RUNNER_TEMP}/flux.tar.gz"
+          echo "b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5  ${RUNNER_TEMP}/flux.tar.gz" | sha256sum --check
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/flux.tar.gz" -C "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0
+      - run: make check
+      - run: make manifests-check
+      - run: make smoke
+      - name: Validate infrastructure configuration
+        run: |
+          for root in infra/target flows/deploy; do
+            tofu -chdir="$root" init -backend=false -lockfile=readonly
+            tofu -chdir="$root" validate
+          done
+      - name: Build runtime image
+        run: |
+          make build-linux
+          docker build --platform linux/amd64 -t mayday:test .
+      - name: Build Ansible runner
+        run: docker build -f Dockerfile.runner -t mayday-runner:test .

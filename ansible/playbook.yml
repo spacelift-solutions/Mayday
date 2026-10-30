@@ -1,0 +1,86 @@
+---
+- name: Deploy or repair the Mayday target
+  hosts: mayday
+  become: true
+  gather_facts: false
+  vars:
+    workers: "{{ lookup('ansible.builtin.env', 'WORKERS', default='2') | int }}"
+    binary_path: /mnt/workspace/mayday
+  pre_tasks:
+    - name: Validate the bounded capacity setting
+      ansible.builtin.assert:
+        that:
+          - workers | int in [2, 8]
+        fail_msg: Mayday supports two or eight application workers
+    - name: Wait for the provisioned host
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+      when: not ansible_check_mode
+    - name: Build the target from the checked-out commit
+      ansible.builtin.command:
+        argv: [go, build, -trimpath, -o, "{{ binary_path }}", ./cmd/mayday]
+        chdir: "{{ playbook_dir }}/.."
+      environment:
+        CGO_ENABLED: "0"
+        GOOS: linux
+        GOARCH: amd64
+      delegate_to: localhost
+      become: false
+      run_once: true
+      changed_when: false
+      when: not ansible_check_mode
+  tasks:
+    - name: Create the service user
+      ansible.builtin.user:
+        name: mayday
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+    - name: Install the executable
+      ansible.builtin.copy:
+        src: "{{ binary_path }}"
+        dest: /usr/local/bin/mayday
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart Mayday
+      when: not ansible_check_mode
+    - name: Configure the target
+      ansible.builtin.template:
+        src: mayday.env.j2
+        dest: /etc/mayday.env
+        owner: root
+        group: mayday
+        mode: "0640"
+      notify: Restart Mayday
+    - name: Install the service unit
+      ansible.builtin.copy:
+        src: mayday.service
+        dest: /etc/systemd/system/mayday.service
+        mode: "0644"
+      notify: Restart Mayday
+    - name: Apply service changes
+      ansible.builtin.meta: flush_handlers
+    - name: Ensure Mayday is running
+      ansible.builtin.systemd_service:
+        name: mayday
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode
+    - name: Check process liveness
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8081/livez
+      register: liveness
+      until: liveness.status == 200
+      retries: 10
+      delay: 2
+      when: not ansible_check_mode
+  handlers:
+    - name: Restart Mayday
+      ansible.builtin.systemd_service:
+        name: mayday
+        state: restarted
+        enabled: true
+        daemon_reload: true
+      when: not ansible_check_mode

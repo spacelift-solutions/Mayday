@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mayday-monitor
+  namespace: mayday
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mayday-state
+  namespace: mayday
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mayday-monitor
+  namespace: mayday
+  labels:
+    app.kubernetes.io/name: mayday-monitor
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mayday-monitor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mayday-monitor
+    spec:
+      serviceAccountName: mayday-monitor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: monitor
+          image: ghcr.io/spacelift-solutions/mayday:unconfigured
+          args: [monitor]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: mayday-runtime
+            - secretRef:
+                name: mayday-control
+          env:
+            - name: STATE_PATH
+              value: /data/monitor.json
+            - name: SERVICE_STACK_ID
+              value: mayday-service
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: state
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /livez
+              port: http
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: mayday-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mayday-monitor
+  namespace: mayday
+spec:
+  selector:
+    app.kubernetes.io/name: mayday-monitor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  type: ClusterIP
