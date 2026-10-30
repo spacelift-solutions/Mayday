@@ -38,6 +38,8 @@ spec:
         app.kubernetes.io/name: mayday-monitor
     spec:
       serviceAccountName: mayday-monitor
+      imagePullSecrets:
+        - name: mayday-ghcr
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532

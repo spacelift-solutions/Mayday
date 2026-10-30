@@ -5,7 +5,8 @@
   gather_facts: false
   vars:
     workers: "{{ lookup('ansible.builtin.env', 'WORKERS', default='2') | int }}"
-    binary_path: /mnt/workspace/mayday
+    build_sha: "{{ lookup('ansible.builtin.env', 'TF_VAR_spacelift_commit_sha') }}"
+    artifact_url: "https://github.com/spacelift-solutions/Mayday/releases/download/build-{{ build_sha }}/mayday-linux-amd64"
   pre_tasks:
     - name: Validate the bounded capacity setting
       ansible.builtin.assert:
@@ -16,19 +17,11 @@
       ansible.builtin.wait_for_connection:
         timeout: 180
       when: not ansible_check_mode
-    - name: Build the target from the checked-out commit
-      ansible.builtin.command:
-        argv: [go, build, -trimpath, -o, "{{ binary_path }}", ./cmd/mayday]
-        chdir: "{{ playbook_dir }}/.."
-      environment:
-        CGO_ENABLED: "0"
-        GOOS: linux
-        GOARCH: amd64
-      delegate_to: localhost
-      become: false
-      run_once: true
-      changed_when: false
-      when: not ansible_check_mode
+    - name: Require the exact source commit for artifact selection
+      ansible.builtin.assert:
+        that:
+          - build_sha is match('^[0-9a-f]{40}$')
+        fail_msg: TF_VAR_spacelift_commit_sha must identify the GitHub Actions build to deploy
   tasks:
     - name: Create the service user
       ansible.builtin.user:
@@ -36,13 +29,19 @@
         system: true
         shell: /usr/sbin/nologin
         create_home: false
-    - name: Install the executable
-      ansible.builtin.copy:
-        src: "{{ binary_path }}"
+    - name: Install the checksum-verified GitHub Actions artifact
+      ansible.builtin.get_url:
+        url: "{{ artifact_url }}"
+        checksum: "sha256:{{ artifact_url }}.sha256"
         dest: /usr/local/bin/mayday
         owner: root
         group: root
         mode: "0755"
+        timeout: 30
+      register: artifact_download
+      until: artifact_download is succeeded
+      retries: 30
+      delay: 10
       notify: Restart Mayday
       when: not ansible_check_mode
     - name: Configure the target

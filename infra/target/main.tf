@@ -40,13 +40,6 @@ resource "aws_security_group" "target" {
   description = "Mayday target access from the shared VPC"
   vpc_id      = data.aws_vpc.shared.id
 }
-resource "aws_vpc_security_group_ingress_rule" "ssh" {
-  security_group_id = aws_security_group.target.id
-  from_port         = 22
-  to_port           = 22
-  ip_protocol       = "tcp"
-  cidr_ipv4         = data.aws_vpc.shared.cidr_block
-}
 resource "aws_vpc_security_group_ingress_rule" "http" {
   security_group_id = aws_security_group.target.id
   from_port         = 8081
@@ -136,11 +129,16 @@ resource "aws_eks_pod_identity_association" "monitor" {
 module "tofusible_host" {
   source = "git::https://github.com/spacelift-solutions/tofusible.git//modules/tofusible_host?ref=463d0363148431da897c5fc864406024364d7884"
 
-  host                 = aws_instance.target.private_ip
+  host                 = aws_instance.target.id
   user                 = "ubuntu"
   ssh_private_key_file = "/mnt/workspace/mayday.pem"
   groups               = ["mayday"]
-  extra_vars           = { license_bucket = aws_s3_bucket.license.id, license_key = var.license_key, aws_region = var.region }
+  extra_vars = {
+    license_bucket          = aws_s3_bucket.license.id
+    license_key             = var.license_key
+    aws_region              = var.region
+    ansible_ssh_common_args = "-o ProxyCommand=\"python3 ssm_proxy.py %h %p ${var.region}\""
+  }
 }
 
 output "inventory_tofu" {

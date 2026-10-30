@@ -72,7 +72,10 @@ A five-minute monitor timeout leaves the incident visibly failed, with an explic
 
 Follow [the deployment and demo runbook](docs/runbook.md).
 Slow infrastructure is provisioned before the live incident walkthrough.
-Images are published to GHCR by the main-branch workflow; make both packages public for unauthenticated cluster/worker pulls, or configure image-pull credentials.
+GitHub Actions builds the Go service and publishes a commit-specific binary and SHA-256 checksum as a prerelease.
+Ansible downloads that artifact using Spacelift’s standard AWS runner on the existing EC2 worker pool.
+The monitor image is published privately to GHCR and uses the SOPS-encrypted `mayday-ghcr` pull Secret.
+See the runbook for deployment order and credential rotation.
 
 ## Development checks
 
@@ -91,7 +94,7 @@ Initialize and validate the `infra/target` and `flows/deploy` OpenTofu roots wit
 Install Flux CLI 2.9.6 and kubeconform 0.8.0 for manifest checks.
 Flux discovers the manifests directly; there are no `kustomization.yaml` files.
 CI compiles the Linux artifact with Go caching, then copies it into the runtime image.
-The runner image remains a separate build.
+There is no custom runner image or Go installation on the workers.
 The custom app can be bundled locally with:
 
 ```sh

@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Spacelift solutions account access, an authenticated `spacectl` solutions profile, and the existing AWS cloud integration.
-- Shared EKS cluster with Pod Identity, EBS CSI, a default storage class, and the EKS worker pool in the target's VPC.
+- Shared EKS cluster with Pod Identity, EBS CSI, a default storage class, and the existing EC2 worker pool.
 - Flux bootstrapped from `spacelift-solutions/flux`, with its dedicated SOPS KMS key and controller decryption permissions applied.
 - An AWS author session with encryption/decryption access to that key, plus SOPS, Flux CLI 2.9.6, and kubeconform 0.8.0.
 - A Flows project on `useflows.eu`, a valid `FLOWS_TOKEN`, and `flowctl`.
@@ -11,9 +11,13 @@
 
 ## Deployment sequence
 
-1. Merge the reviewed Mayday code and publish both images.
+1. Merge the reviewed Mayday code and let GitHub Actions publish the service binary and monitor image.
    CI compiles the Linux binary with Go caching and copies the artifact into the runtime image.
-   Make the GHCR packages public or configure private image-pull authentication.
+   Keep the GHCR packages private.
+   Confirm the `build-<commit SHA>` prerelease has `mayday-linux-amd64` and its `.sha256` checksum.
+   Ansible selects that exact commit through `TF_VAR_spacelift_commit_sha` and retries briefly if publication is still in progress.
+   The existing EC2 pool uses Spacelift’s standard AWS Ansible runner; no custom runner or worker registry credentials are required.
+   The monitor's pull Secret is `kubernetes/ghcr.sops.yaml` and reconciles with its workload.
    Record the runtime image digest from the publishing workflow.
 2. Apply the companion `demo/admin` change.
    It creates four stacks, the SSH context, scoped Flows API key, and Intent policy.
@@ -62,6 +66,30 @@ kubectl -n mayday rollout status deployment/mayday-monitor
 ```
 
 ## Authentication
+
+### Private image pulls
+
+The monitor uses a dedicated GitHub classic PAT with only `read:packages`, authorized for the organization and with read access to the Mayday package.
+The source credential is stored in the vault at `/work/ghcr/mayday-pull-token`.
+The Deployment references its namespace-local `mayday-ghcr` Secret through `imagePullSecrets`.
+The existing EC2 workers use the public standard Ansible runner and need no GHCR credentials.
+
+To rotate, replace the vault token and update `.dockerconfigjson` in `kubernetes/ghcr.sops.yaml` using SOPS.
+Keep plaintext out of Git and command arguments.
+Validate and merge the encrypted update, wait for Flux reconciliation, then verify a fresh monitor pull before revoking the old token.
+The monitor remains suspended until its runtime configuration and image digest are ready.
+
+### Private target access
+
+The existing EC2 workers and shared EKS cluster are in separate VPCs with overlapping CIDRs.
+Ansible uses [SSH through SSM](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-enable-ssh-connections.html) to reach the target by instance ID; the standard AWS runner already includes the Session Manager plugin and boto3.
+The small `ansible/ssm_proxy.py` adapter starts an SSM session with boto3 and hands the SSH byte stream to the installed plugin.
+The service and diagnostics stacks receive AWS credentials through the existing cloud integration, and SSH still authenticates with the Mayday key.
+No inbound SSH rule is required.
+The monitor reaches port 8081 within the target's EKS VPC.
+Verify the target is online in SSM and the Ansible deployment succeeds before presenting.
+
+### Dashboard access
 
 The demo password is exchanged for an HttpOnly, SameSite=Strict session cookie valid for eight hours.
 Sign out revokes that session; a monitor restart invalidates all sessions.
