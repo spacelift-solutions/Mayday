@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/spacelift-solutions/Mayday/internal/model"
 )
@@ -20,7 +22,7 @@ var ErrDenied = errors.New("license access denied")
 
 type Store interface {
 	Check(context.Context) error
-	Delete(context.Context) error
+	Invalidate(context.Context) error
 }
 
 func validate(r io.Reader) error {
@@ -47,12 +49,11 @@ func (f File) Check(_ context.Context) error {
 	defer func() { _ = r.Close() }()
 	return validate(r)
 }
-func (f File) Delete(_ context.Context) error {
-	err := os.Remove(f.Path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return err
+
+const disabledLicense = "{\"service\":\"mayday\",\"license_key\":\"DEMO-ONLY\",\"enabled\":false}\n"
+
+func (f File) Invalidate(_ context.Context) error {
+	return os.WriteFile(f.Path, []byte(disabledLicense), 0600)
 }
 
 type S3 struct {
@@ -77,8 +78,13 @@ func (s S3) Check(ctx context.Context) error {
 	defer func() { _ = out.Body.Close() }()
 	return validate(out.Body)
 }
-func (s S3) Delete(ctx context.Context) error {
-	_, err := s.Client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(s.Key)})
+func (s S3) Invalidate(ctx context.Context) error {
+	_, err := s.Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.Bucket), Key: aws.String(s.Key),
+		Body:                 strings.NewReader(disabledLicense),
+		ContentType:          aws.String("application/json"),
+		ServerSideEncryption: types.ServerSideEncryptionAes256,
+	})
 	return err
 }
 

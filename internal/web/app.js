@@ -8,7 +8,7 @@ const el = (id) => document.getElementById(id),
   };
 const labels = {
   "fault.outage": "Outage requested",
-  "fault.license": "License object removed",
+  "fault.license": "License invalidated",
   "incident.opened": "Incident detected",
   "incident.recovered": "Recovery verified",
   "incident.failed": "Recovery timed out",

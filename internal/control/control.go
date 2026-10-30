@@ -427,7 +427,7 @@ func (s *Server) Handler(ui http.Handler) http.Handler {
 			respond(w, 409, map[string]string{"error": "Resolve the current incident first"})
 			return
 		}
-		s.action(w, r, func(ctx context.Context) error { return s.store.Delete(ctx) }, "fault.license")
+		s.action(w, r, func(ctx context.Context) error { return s.store.Invalidate(ctx) }, "fault.license")
 	})
 	api.HandleFunc("POST /api/fault/outage", func(w http.ResponseWriter, r *http.Request) {
 		if !s.canFault() {

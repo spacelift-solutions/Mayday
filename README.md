@@ -1,9 +1,9 @@
 # Mayday
 
 An incident and recovery story for Spacelift.
-Use Mission Control to stop a service, remove its license, or increase traffic.
+Use Mission Control to stop a service, invalidate its license, or increase traffic.
 An independent monitor detects the effects and sends events to Flows.
-Ansible handles known repairs; Intelligence investigates missing dependencies and Intent restores them under policy.
+Ansible handles known repairs; Intelligence investigates dependency failures and Intent repairs them under policy.
 
 ## Run locally
 
@@ -20,7 +20,7 @@ The target listens on port 8081.
 Both processes bind to loopback.
 
 Local mode uses `.local/demo-license.json` instead of S3.
-The **Remove license file** button deletes it and the monitor detects the resulting dependency failure.
+The **Invalidate license** button writes `enabled: false` to it and the monitor detects the resulting dependency failure.
 Restore it with:
 
 ```sh
@@ -53,10 +53,10 @@ The four Spacelift stacks manage infrastructure, service configuration, diagnost
 | Control | Observed effect | Recovery |
 | --- | --- | --- |
 | Cause outage | EC2 systemd service stops through a fixed SSM document | Flows triggers the Ansible service stack |
-| Remove license file | Readiness and work requests fail while diagnostics stay available | Flows collects evidence; ask Intelligence “What's happening with this service?”, then “Fix it” using Intent |
+| Invalidate license | Readiness and work requests fail while diagnostics stay available | Flows collects evidence; ask Intelligence “What's happening with this service?”, then “Fix it” using Intent |
 | Heavy traffic (22 req/s) | A two-worker target builds a queue and rejects excess requests | Flows persists `WORKERS=8` on the service stack and runs Ansible |
 | Light traffic (2 req/s) | Sustained low load with excess capacity | After cooldown, Flows persists `WORKERS=2` and runs Ansible |
-| Reset demo | Load returns to two requests/second | Flows reapplies baseline service configuration; restore a missing license through Intent first |
+| Reset demo | Load returns to two requests/second | Flows reapplies baseline service configuration; restore an invalid license through Intent first |
 
 Each synthetic request waits 200 ms, modeling an I/O-bound job.
 This is application concurrency adjustment, not EC2 autoscaling.
@@ -99,7 +99,7 @@ The Flow uses built-in HTTP, Spacelift Trigger Run/GraphQL, and core blocks; no 
 `make flows-check` executes the JavaScript expressions from the exported YAML and checks incident routing, authentication, duplicate handling, and recovery evidence. Node.js is only needed for these local/CI tests.
 See the runbook for exporting canvas changes and adopting the reviewed live deployment.
 
-No local check proves cloud IAM, cluster connectivity, Flows delivery, or Intent recreation of an externally deleted object.
+No local check proves cloud IAM, cluster connectivity, Flows delivery, or Intent repair of an externally modified object.
 Rehearse those with the runbook in the live account before presenting.
 
 ## Releases
