@@ -66,10 +66,29 @@ test("accepts Go observation events and rejects malformed evidence", () => {
   e.type = "observation";
   assert.equal(condition("Validate observation", { monitorWebhook: { body: e } }), true);
   assert.equal(condition("New incident", context(e)), false);
-  for (const bad of [{ ...e, service: "other" }, { ...e, type: "fault.outage" },
+  for (const bad of [{ ...e, service: "other" }, { ...e, type: "fault.unknown" },
     { ...e, observation: { ...e.observation, errors: 5 } },
     { ...e, observation: { ...e.observation, at: "invalid" } }, {}]) {
     assert.equal(condition("Validate observation", { monitorWebhook: { body: bad } }), false);
+  }
+});
+
+test("activity events cannot block queued incidents or trigger a repair themselves", () => {
+  // The monitor delivers its outbox in order and retries non-2xx responses.
+  // A rejected fault or traffic event would block the incident behind it.
+  for (const type of ["fault.outage", "fault.license", "traffic.changed"]) {
+    const activity = sample(); activity.type = type; delete activity.incident;
+    const incident = sample(); incident.id = "abcdefabcdefabcdefabcdee";
+    const dispatched = [];
+    for (const event of [activity, incident]) {
+      assert.equal(condition("Validate observation", { monitorWebhook: { body: event } }), true, type);
+      if (condition("New incident", context(event))) dispatched.push(event.id);
+    }
+    assert.deepEqual(dispatched, [incident.id]);
+    // A traffic change during an active incident is also informational.
+    activity.incident = incident.incident;
+    assert.equal(condition("Validate observation", { monitorWebhook: { body: activity } }), true);
+    assert.equal(condition("New incident", context(activity)), false);
   }
 });
 
