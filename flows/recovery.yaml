@@ -622,7 +622,7 @@ blocks:
             (() => {
             const e=outputs.monitorWebhook.body;
             if (!e || typeof e !== "object" || !/^[a-f0-9]{24}$/.test(e.id) || e.service !== "mayday" || !Number.isFinite(Date.parse(e.at))) return false;
-            if (!["observation","incident.opened","incident.recovered","incident.failed"].includes(e.type)) return false;
+            if (!["observation","incident.opened","incident.recovered","incident.failed","fault.outage","fault.license","traffic.changed"].includes(e.type)) return false;
             const o=e.observation;
             if (!o || typeof o.reachable !== "boolean" || !Number.isFinite(Date.parse(o.at)) || !Number.isSafeInteger(o.samples) || o.samples<0 || !Number.isSafeInteger(o.errors) || o.errors<0 || o.errors>o.samples || !Number.isFinite(o.latency_ms) || o.latency_ms<0 || !o.health || typeof o.health.status !== "string" || !Number.isSafeInteger(o.health.workers)) return false;
             if(e.incident && (!/^[a-f0-9]{24}$/.test(e.incident.id) || !["outage","dependency","capacity_up","capacity_down","reset"].includes(e.incident.kind) || !["open","recovering","recovered","failed"].includes(e.incident.status))) return false;
