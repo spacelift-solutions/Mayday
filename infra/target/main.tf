@@ -115,7 +115,7 @@ resource "aws_iam_role" "monitor" {
 resource "aws_iam_role_policy" "monitor" {
   role = aws_iam_role.monitor.id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
-    { Effect = "Allow", Action = ["s3:GetObject", "s3:DeleteObject"], Resource = local.object_arn },
+    { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = local.object_arn },
     { Effect = "Allow", Action = ["ssm:SendCommand"], Resource = [aws_ssm_document.stop.arn, aws_instance.target.arn] }
   ] })
 }

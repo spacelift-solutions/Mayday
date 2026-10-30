@@ -29,6 +29,7 @@
    Mayday passes only host metadata and an SSH key path to the module, so its output is explicitly nonsensitive and needs no private-worker sensitive-output upload setting.
 4. In the **Mayday license** Intent project, create `license/demo-license.json` in the infrastructure stack's `license_bucket` output.
    Use resource type `aws_s3_object`, `server_side_encryption = "AES256"`, `acl = ""`, and the exact content from `demo-license.json`.
+   Set `etag` to the MD5 of that exact content, including its trailing newline (`0ddb3ebffccfbffc98c50fbbcfd18fdc` for the checked-in file), so content drift produces an upload on repair.
    The bucket uses `BucketOwnerEnforced` ownership and blocks public access; leave the ACL empty because S3 disables object ACLs for this bucket.
    Intent exclusively owns this object.
 5. Create or edit `kubernetes/control.sops.yaml` with `AWS_PROFILE=demo sops edit kubernetes/control.sops.yaml`.
@@ -69,6 +70,18 @@ After a ConfigMap or Secret change reconciles, restart the monitor deployment to
 kubectl -n mayday rollout restart deployment/mayday-monitor
 kubectl -n mayday rollout status deployment/mayday-monitor
 ```
+
+## Updating an existing deployment for license invalidation
+
+1. Merge the license-invalidation change and wait for GitHub Actions to publish its image.
+2. Apply `mayday-infrastructure` to replace the monitor's `s3:DeleteObject` permission with `s3:PutObject` on the single license key.
+3. Run `mayday-service` at the merged commit (or confirm its dependency-triggered run finished) to install the updated diagnostic repair guidance.
+4. Update the image digest in `kubernetes/monitor.yaml` to the newly published image in a reviewed PR, then merge and wait for Flux and the monitor rollout to become Ready.
+5. Run the license scenario twice, using refresh and the desired ETag for each Intent repair. Confirm both incidents recover and Intent retains exactly one `mayday-license` resource.
+
+Apply IAM before rolling out the new monitor; the old button cannot delete the license after IAM changes, and the new button needs write permission.
+No admin policy or Flow change is needed.
+An object already missing from an earlier demo needs the separately authorized state-eject/recreate recovery before rehearsal; do not create a duplicate Intent resource.
 
 ## Authentication
 
@@ -174,8 +187,8 @@ Follow the Ansible run, then the independent recovery verification.
 
 ### License failure and AI policy
 
-Click **Remove license file**.
-The Kubernetes service deletes the designated S3 object.
+Click **Invalidate license**.
+The Kubernetes monitor writes `enabled: false` to the designated S3 object, keeping its bucket, key, and Intent resource identity intact.
 The target keeps its process and diagnostic endpoint alive, but readiness and work requests fail.
 
 Open the resulting `mayday-diagnostics` run.
@@ -189,9 +202,17 @@ Then say:
 
 > Fix it.
 
-The approved repair is an Intent operation on the license object.
+The approved repair updates the existing `mayday-license` Intent resource.
+Refresh it first, then update with the original bucket/key, `acl = ""`, `server_side_encryption = "AES256"`, the exact content from `demo-license.json`, and `etag = "0ddb3ebffccfbffc98c50fbbcfd18fdc"` (MD5 of that content including its trailing newline).
+The provider refreshes the S3 ETag but does not download the body into its `content` state field.
+Explicitly supplying the desired ETag after refresh makes the repair upload valid content even if Intent's remembered `content` already says `enabled: true`.
+See the [AWS provider's object read and update implementation](https://github.com/hashicorp/terraform-provider-aws/blob/v6.71.0/internal/service/s3/object.go).
+If the assistant needs a more specific repair prompt, use:
+
+> Refresh the existing mayday-license resource, then update that same resource with the valid demo license content and its matching ETag. Keep its bucket/key, empty ACL, and AES256 encryption. Verify live service health afterward.
+
 Confirm the policy evaluation and operation history, then watch the independent monitor verify actual work requests.
-Validate refresh/recreation of the externally deleted object during rehearsal; do not create a second unmanaged resource.
+Repeat this scenario twice during rehearsal to confirm the same Intent resource can be repaired each time.
 
 For the explicit policy demonstration, ask Intent to delete the restored license.
 Show the server-side policy denial, then confirm the service stays healthy.

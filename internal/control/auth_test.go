@@ -57,8 +57,8 @@ func TestSessionProtectsFaultsAndLogoutRevokesAccess(t *testing.T) {
 			t.Errorf("%s: expected %d got %d", test.path, test.status, w.Code)
 		}
 	}
-	if s.store.(*fakeStore).deletes != 1 {
-		t.Fatal("unauthorized deletion executed")
+	if s.store.(*fakeStore).invalidations != 1 {
+		t.Fatal("unauthorized invalidation executed")
 	}
 }
 
@@ -102,8 +102,8 @@ func TestBrowserCrossOriginRequestsCannotLogInOrInjectFaults(t *testing.T) {
 			t.Errorf("cross-origin %s accepted", path)
 		}
 	}
-	if s.store.(*fakeStore).deletes != 0 {
-		t.Fatal("cross-origin deletion executed")
+	if s.store.(*fakeStore).invalidations != 0 {
+		t.Fatal("cross-origin invalidation executed")
 	}
 }
 
