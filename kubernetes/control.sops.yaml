@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: mayday-control
+    namespace: mayday
+type: Opaque
+stringData:
+    DEMO_PASSWORD: ENC[AES256_GCM,data:C6Mmu0Anmpl8R4s329cF+QzwVsNXqXPKVqCGCfBl+xU=,iv:6xRN6nXaUcb57BJiU6PiTP2ETo1APRJRpSBg3IKYhNk=,tag:VOd61hjLXjo8OlhlZ7ogaw==,type:str]
+    FLOWS_WEBHOOK_TOKEN: ENC[AES256_GCM,data:g8fM4QnAfqdXXQU75cmb82tfrbGxaLj140K/csQnBlbAeETc2efYPAeZFQ==,iv:TuKCLckLKwGyTnOKs0POceA+P+Lt/Pl55RBCxlnM2pA=,tag:LHTBUgb+ZwwiAziWQ6dD8Q==,type:str]
+sops:
+    encrypted_regex: ^(data|stringData)$
+    kms:
+        - arn: arn:aws:kms:us-east-1:234878555361:alias/flux-sops-spacelift-solutions-cluster
+          aws_profile: ""
+          created_at: "2026-10-30T19:41:14Z"
+          enc: AQICAHi7UM/XY4YN3CfjkcIIzn/vGeSn6SSLexHKvaCeODByCwGnSdqrX55rAIrbMCgNOVmxAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMoh1QgopvgrY43g18AgEQgDsj0vdf/GSbhL0xg0Zxok01xuFbeX6JXVEODi6f0U78zX6KRZzBuBafZfXVD66mR2AixqxvAEBntxABEg==
+    lastmodified: "2026-10-30T19:41:16Z"
+    mac: ENC[AES256_GCM,data:5egEA9ClLKIvw7d93OTTLXDP0Rp8n3MTzdlZaafpkiLUlCypSvprPzMnOPeyfnhIKG4ZRJBY4qJPvO80FatilX1BnHXFyIgbfi2hvS2N9cZfkDvdMeUZF59XyIwnF8o2G++0vnhWN/mJZs8POSu1u726zJnHEewKq971NW876ZA=,iv:lnFMMIcW2tZnxW00tYZvW1KWNr/Ep1gxnNIYgbOPsXY=,tag:V7dy7NT93yH39fqHSnnNJQ==,type:str]
+    version: 3.13.3

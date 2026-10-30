@@ -1,0 +1,7 @@
+.git
+.local
+.venv
+**/.terraform
+**/node_modules
+*.tfstate*
+*.tfvars

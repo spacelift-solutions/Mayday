@@ -1,1 +1,12 @@
 
+# Mayday build and runtime state
+.local/
+bin/
+**/node_modules/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+__pycache__/
+*.pyc
+.venv/

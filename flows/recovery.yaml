@@ -1,0 +1,54 @@
+appInstallations:
+  mayday:
+    appName: Mayday Monitor
+    appVersion: 0.1.0
+blocks:
+  - name: Observe Mayday
+    type:
+      appBlock: {block: monitor, appInstallation: mayday}
+    position: [100, 350]
+  - name: Restart service
+    type:
+      appBlock: {block: repair, appInstallation: mayday}
+    position: [500, 50]
+    config: {action: restart}
+    inputs:
+      default:
+        links: [{block: Observe Mayday, output: restart}]
+        config: {incident: !expr previous}
+  - name: Gather evidence for Intelligence
+    type:
+      appBlock: {block: repair, appInstallation: mayday}
+    position: [500, 200]
+    config: {action: diagnose}
+    inputs:
+      default:
+        links: [{block: Observe Mayday, output: diagnose}]
+        config: {incident: !expr previous}
+  - name: Increase worker capacity
+    type:
+      appBlock: {block: repair, appInstallation: mayday}
+    position: [500, 350]
+    config: {action: scaleUp}
+    inputs:
+      default:
+        links: [{block: Observe Mayday, output: scaleUp}]
+        config: {incident: !expr previous}
+  - name: Reduce worker capacity
+    type:
+      appBlock: {block: repair, appInstallation: mayday}
+    position: [500, 500]
+    config: {action: scaleDown}
+    inputs:
+      default:
+        links: [{block: Observe Mayday, output: scaleDown}]
+        config: {incident: !expr previous}
+  - name: Restore baseline
+    type:
+      appBlock: {block: repair, appInstallation: mayday}
+    position: [500, 650]
+    config: {action: reset}
+    inputs:
+      default:
+        links: [{block: Observe Mayday, output: reset}]
+        config: {incident: !expr previous}

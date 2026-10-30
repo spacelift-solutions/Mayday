@@ -1,0 +1,19 @@
+[Unit]
+Description=Mayday synthetic workload service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mayday
+Group=mayday
+EnvironmentFile=/etc/mayday.env
+ExecStart=/usr/local/bin/mayday target
+Restart=no
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/etc/mayday.env
+
+[Install]
+WantedBy=multi-user.target

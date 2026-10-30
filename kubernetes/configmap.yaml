@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mayday-runtime
+  namespace: mayday
+data:
+  AWS_REGION: us-east-1
+  TARGET_URL: ""
+  TARGET_INSTANCE_ID: ""
+  LICENSE_BUCKET: mayday-234878555361-us-east-1
+  LICENSE_KEY: license/demo-license.json
+  STOP_DOCUMENT_NAME: MaydayStopService
+  FLOWS_WEBHOOK_URL: ""
