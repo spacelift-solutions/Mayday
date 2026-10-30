@@ -80,7 +80,8 @@ They do not exchange a Spacelift API key.
 `FLOWS_TOKEN` remains necessary for the OpenTofu deployment stack; it is a separate credential used to manage the Flow.
 
 The HTTP endpoint authenticates the monitor with `secrets.MAYDAY_WEBHOOK_TOKEN` and redacts the authorization header in events.
-Rotate the token in the encrypted Kubernetes Secret and the write-only `TF_VAR_webhook_token`, apply `mayday-flows`, then restart the monitor after Flux reconciles the Secret.
+The Flow stack uses OpenTofu 1.13.1 because the provider's secret value is write-only (requires 1.11+). The token variable is also ephemeral, keeping it out of saved plans.
+Provider 0.7.0 has no secret revision argument, so changing the variable alone does not schedule an update. To rotate, update `MAYDAY_WEBHOOK_TOKEN` in the Flows project, the write-only `TF_VAR_webhook_token`, and the encrypted Kubernetes Secret to the same value; then restart the monitor after Flux reconciles the Secret. Do not replace the secret resource merely to rotate it.
 
 ### Private image pulls
 
@@ -123,8 +124,8 @@ The export preserves the reviewed block names, layout, notes, links, and webhook
 Keep the resource address `flows_flow.recovery`: it already owns this Flow in the `mayday-flows` stack state.
 
 1. Merge this Mayday change before applying the companion admin change, so any new Flow run uses the native definition.
-2. Apply the companion admin change. Its idempotent access bootstrap recognizes the existing scoped project binding; it also removes the retired Spacelift recovery API key and its environment variables.
-3. Plan `mayday-flows`. `flows/deploy/imports.tf` adopts the existing project secret, then sets its value from the existing write-only variable. The old app installation, six config fields, and confirmation are retired.
+2. Apply the companion admin change. Its idempotent access bootstrap recognizes the existing scoped project binding; it also upgrades only the Flow stack to OpenTofu 1.13.1 and removes the retired Spacelift recovery API key and its environment variables.
+3. Plan `mayday-flows`. `flows/deploy/imports.tf` adopts the existing project secret without rewriting its value. The old app installation, six config fields, and confirmation are retired.
 4. Confirm only after the plan preserves the Flow ID, native blocks, and webhook path. No target infrastructure or service changes belong in this migration.
 5. Remove the obsolete operator-set `TF_VAR_app_version_id` variable from `mayday-flows`. The published custom app can be archived after its installation is removed.
 6. Merge the prepared Flux unsuspend change after the monitor image and runtime settings are ready, then rehearse all five incident paths.

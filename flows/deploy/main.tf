@@ -1,4 +1,5 @@
 terraform {
+  required_version = ">= 1.11.0"
   required_providers {
     flows = {
       source  = "spacelift-io/flows"
@@ -15,6 +16,7 @@ variable "project_id" { type = string }
 variable "webhook_token" {
   type      = string
   sensitive = true
+  ephemeral = true
 }
 
 resource "flows_secret" "webhook" {

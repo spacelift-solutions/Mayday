@@ -7,7 +7,7 @@ Ansible handles known repairs; Intelligence investigates missing dependencies an
 
 ## Run locally
 
-Requires Go 1.27.3+, Python 3, Node.js 22+, and OpenTofu 1.8+ for configuration checks.
+Requires Go 1.27.3+, Python 3, Node.js 22+, and OpenTofu 1.11+ for configuration checks (CI uses 1.13.1).
 Install the shared repository hooks with `make hooks`.
 
 ```sh
