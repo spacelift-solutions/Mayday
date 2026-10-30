@@ -21,6 +21,7 @@
    Record the runtime image digest from the publishing workflow.
 2. Apply the companion `demo/admin` change.
    It creates four stacks, the SSH context, scoped Flows API key, and Intent policy.
+   The public key is mounted at `/mnt/workspace/mayday.pub` for OpenTofu; the private key is mounted separately for Ansible.
    The idempotent GraphQL bootstrap creates the Intent project and attaches its policy before its existing AWS integration.
 3. Run `mayday-infrastructure`.
    It creates the private target, bucket, and monitor Pod Identity association.

@@ -33,7 +33,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "license" {
 
 resource "aws_key_pair" "target" {
   key_name   = "mayday"
-  public_key = var.ssh_public_key
+  public_key = trimspace(file(var.ssh_public_key_file))
 }
 resource "aws_security_group" "target" {
   name_prefix = "mayday-"
