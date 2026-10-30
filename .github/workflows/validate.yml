@@ -44,5 +44,8 @@ jobs:
         run: |
           make build-linux
           docker build --platform linux/amd64 -t mayday:test .
-      - name: Build Ansible runner
-        run: docker build -f Dockerfile.runner -t mayday-runner:test .
+      - name: Check Ansible with the standard AWS runner
+        run: |
+          docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace/ansible \
+            public.ecr.aws/spacelift/runner-ansible@sha256:c4edf84de69474657ca1376976bae7ec6c2d5fbb2074cce1bdae673bc99aaa88 \
+            sh -c 'python3 -m unittest discover -s tests && ansible-playbook --syntax-check -i localhost, playbook.yml && ansible-playbook --syntax-check -i localhost, diagnose.yml'

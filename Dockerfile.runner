@@ -1,5 +1,0 @@
-FROM golang:1.27-bookworm
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv openssh-client ca-certificates git curl unzip && rm -rf /var/lib/apt/lists/*
-RUN python3 -m venv /opt/ansible && /opt/ansible/bin/pip install --no-cache-dir ansible-core==2.19.3
-ENV PATH="/opt/ansible/bin:${PATH}"
-WORKDIR /mnt/workspace
