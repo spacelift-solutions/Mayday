@@ -68,7 +68,10 @@ const monitor: AppBlock = {
       "reset",
       "recovered",
       "failed",
-    ].map((key) => [key, { name: key, type: { type: "object" } }]),
+    ].map((key) => [
+      key,
+      { name: key, default: key === "restart", type: { type: "object" } },
+    ]),
   ),
   http: {
     onRequest: async (input) => {
@@ -307,7 +310,11 @@ const repair: AppBlock = {
     },
   },
   outputs: {
-    recovered: { name: "Verified recovery", type: { type: "object" } },
+    recovered: {
+      name: "Verified recovery",
+      default: true,
+      type: { type: "object" },
+    },
     diagnosed: {
       name: "Evidence ready for Intelligence",
       type: { type: "object" },
@@ -317,7 +324,7 @@ const repair: AppBlock = {
   onTimer: watch,
 };
 
-export default defineApp({
+export const app = defineApp({
   name: "Mayday Monitor",
   installationInstructions:
     "Configure the scoped Spacelift API key, then point the monitor at the Monitor events block's HTTP endpoint. The monitor needs outbound HTTPS only.",
