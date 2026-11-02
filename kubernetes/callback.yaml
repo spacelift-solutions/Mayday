@@ -9,10 +9,10 @@ metadata:
     alb.ingress.kubernetes.io/load-balancer-name: mayday-callback
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
     alb.ingress.kubernetes.io/healthcheck-path: /livez
-    alb.ingress.kubernetes.io/conditions.mayday-monitor: '[{"field":"http-request-method","httpRequestMethodConfig":{"values":["POST"]}}]'
     external-dns.kubernetes.io/hostname: mayday.spacelift.shovel-emporium.com
 spec:
   ingressClassName: alb
@@ -21,8 +21,8 @@ spec:
     - host: mayday.spacelift.shovel-emporium.com
       http:
         paths:
-          - path: /api/flows/result
-            pathType: Exact
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: mayday-monitor
