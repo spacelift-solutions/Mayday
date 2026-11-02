@@ -93,7 +93,10 @@ resource "aws_instance" "target" {
     encrypted   = true
     volume_size = 12
   }
-  tags = { Name = "Mayday target" }
+  tags = {
+    Name        = "Mayday target"
+    Application = "mayday"
+  }
 }
 resource "aws_ssm_document" "stop" {
   name          = "MaydayStopService"
