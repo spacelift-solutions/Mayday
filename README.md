@@ -2,7 +2,8 @@
 
 An incident and recovery story for Spacelift.
 Use Mission Control to stop a service, invalidate its license, or increase traffic.
-An independent monitor detects the effects and sends events to Flows.
+An independent monitor detects the effects and sends only new incidents or explicit retries to Flows.
+Flows pushes its results back to the monitor; routine health checks never invoke Flows.
 Ansible handles known repairs; Intelligence investigates dependency failures and Intent repairs them under policy.
 
 ## Run locally
@@ -40,7 +41,7 @@ Local mode deliberately does not fake Flows, Intent, or SSM: cloud repair contro
 | `infra/target` | EC2, private S3 bucket, SSM stop document, and scoped AWS identities |
 | `ansible` | Tofusible-compatible inventory, deployment/repair, and diagnostic evidence |
 | `kubernetes` | Plain Kubernetes manifests and the SOPS-encrypted monitor Secret |
-| `flows/recovery.yaml` | Exported native Flow: HTTP intake, incident branches, Spacelift runs, and independent verification |
+| `flows/recovery.yaml` | Native Flow definition: incident intake, Spacelift runs, and result callbacks |
 | `flows/deploy`, `flows/test` | Flow/secret deployment and tests of the exported expressions and routing |
 
 Spacelift spaces, stacks, dependencies, credentials, and the Intent policy are managed in `spacelift-solutions/demo`, under `admin/modules/mayday`.

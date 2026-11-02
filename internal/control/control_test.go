@@ -103,7 +103,7 @@ func TestPersistedOutboxAndRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.state.Outbox) != 2 || r.state.Incident.ID != s.state.Incident.ID {
+	if len(r.state.Outbox) != 1 || r.state.Incident.ID != s.state.Incident.ID || r.state.Incident.AttemptID != r.state.Outbox[0].ID {
 		t.Fatal("incident or delivery queue was lost on restart")
 	}
 	b, _ := json.Marshal(r.state)
