@@ -95,6 +95,10 @@ For an authoring view, open its published version in **Templates Workbench** and
 
 Create a deployment and enter `INVALID` as the license key.
 Version 1.1.0 adds the deployment's creation timestamp to the stack name and object key, keeping the suffix stable when correcting inputs.
+Use version 1.2.0 for disposable demos: one hour after creation, it deletes the deployment, stack, and sandbox object.
+The shared bucket and Intent's live `license/demo-license.json` are outside that stack and remain intact.
+The policy rejects the reserved deployment name `demo-license`, including timestamped variants.
+The prepared older deployments keep their history because they have no automatic deletion schedule.
 This creates a sandbox request under `license-requests/`; it does not replace the service's live license owned by Intent.
 To avoid a planning wait, use the prepared **Mayday license demo** deployment and its recorded denied run in step 8.
 
