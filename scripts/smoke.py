@@ -115,16 +115,22 @@ def main():
                 lambda: request(monitor_url + "/api/state")["observation"]["reachable"],
                 "independent monitor connected",
             )
-            request(monitor_url + "/api/fault/license", {})
-            wait_for(
-                lambda: incident("dependency", "open"),
-                "license deletion detected independently",
-            )
-            shutil.copyfile(ROOT / "demo-license.json", license_file)
-            wait_for(
-                lambda: incident("dependency", "recovered"),
-                "license recovery verified with real work",
-            )
+            for cycle in range(2):
+                request(monitor_url + "/api/fault/license", {})
+                assert license_file.exists(), "fault must keep the license file"
+                assert json.loads(license_file.read_text())["enabled"] is False
+                wait_for(
+                    lambda: incident("dependency", "open")
+                    and request(monitor_url + "/api/state")["observation"]["health"][
+                        "license"
+                    ] == "invalid",
+                    f"license invalidation detected independently (cycle {cycle + 1})",
+                )
+                shutil.copyfile(ROOT / "demo-license.json", license_file)
+                wait_for(
+                    lambda: incident("dependency", "recovered"),
+                    f"license recovery verified with real work (cycle {cycle + 1})",
+                )
             request(monitor_url + "/api/traffic", {"rate": 22})
             wait_for(
                 lambda: incident("capacity_up", "open"),

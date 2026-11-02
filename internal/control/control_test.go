@@ -14,10 +14,10 @@ import (
 
 var testPassword = rand.Text()
 
-type fakeStore struct{ deletes int }
+type fakeStore struct{ invalidations int }
 
-func (*fakeStore) Check(context.Context) error    { return nil }
-func (f *fakeStore) Delete(context.Context) error { f.deletes++; return nil }
+func (*fakeStore) Check(context.Context) error        { return nil }
+func (f *fakeStore) Invalidate(context.Context) error { f.invalidations++; return nil }
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
@@ -69,9 +69,11 @@ func TestClassificationAndBoundedScaling(t *testing.T) {
 		t.Fatal("overload not detected")
 	}
 	o.Health.Status = "degraded"
-	o.Health.License = "missing"
-	if classify(o) != "dependency" {
-		t.Fatal("license outage classified as capacity")
+	for _, status := range []string{"missing", "invalid"} {
+		o.Health.License = status
+		if classify(o) != "dependency" {
+			t.Fatalf("%s license classified as capacity", status)
+		}
 	}
 	o = healthy(8)
 	o.RequestRate = 2

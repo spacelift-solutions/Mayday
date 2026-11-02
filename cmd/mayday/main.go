@@ -149,6 +149,9 @@ func diagnose(ctx context.Context) error {
 		return err
 	}
 	fmt.Println("Expected entitlement: service=mayday, license_key=DEMO-ONLY, enabled=true. Resource ownership: bucket=OpenTofu; license object=Intent. Inspect the Mayday Intent project's policy and current object state before repair.")
+	if h.License == "invalid" {
+		fmt.Println("S3 content repair: refresh the existing Intent resource, then update that same resource with valid license content and etag set to the MD5 of those exact bytes. S3 refresh reads metadata, not the content body; the explicit desired etag ensures an upload even if remembered content already looks valid. Keep the bucket/key, empty ACL, and AES256 encryption.")
+	}
 	if resp.StatusCode != 200 || h.Status != "healthy" {
 		return errors.New("service dependency check failed; evidence printed above")
 	}

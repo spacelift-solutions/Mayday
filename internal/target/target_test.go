@@ -47,8 +47,8 @@ func TestLicenseLossAndRestoration(t *testing.T) {
 
 type validStore struct{}
 
-func (validStore) Check(context.Context) error  { return nil }
-func (validStore) Delete(context.Context) error { return nil }
+func (validStore) Check(context.Context) error      { return nil }
+func (validStore) Invalidate(context.Context) error { return nil }
 
 func TestCapacityAndCancellation(t *testing.T) {
 	s := New(validStore{}, 1, 0, time.Hour, "", "")
