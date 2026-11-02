@@ -108,12 +108,26 @@ func New(cfg Config, store license.Store, faults Faults) (*Server, error) {
 	if s.state.Rate < 0 || s.state.Rate > 80 {
 		return nil, errors.New("invalid saved request rate")
 	}
+	// Drop telemetry and local activity queued by older monitor versions.
+	out := s.state.Outbox[:0]
+	for _, e := range s.state.Outbox {
+		if e.Type == "incident.opened" {
+			if i := s.state.Incident; i != nil && e.Incident != nil && e.Incident.ID == i.ID {
+				i.AttemptID = e.ID
+			}
+			out = append(out, e)
+		}
+	}
+	s.state.Outbox = out
 	return s, nil
 }
 
-func (s *Server) persistLocked() {
+func (s *Server) persistLocked() error {
 	if s.cfg.StatePath == "" {
-		return
+		return nil
+	}
+	if s.state.DeliveryError == "Monitor persistence failed" {
+		s.state.DeliveryError = ""
 	}
 	b, err := json.Marshal(diskState{State: s.state, Outbox: s.state.Outbox})
 	if err == nil {
@@ -129,6 +143,7 @@ func (s *Server) persistLocked() {
 		s.state.DeliveryError = "Monitor persistence failed"
 		slog.Error("persist monitor state", "error", err)
 	}
+	return err
 }
 
 func id() string {
@@ -143,30 +158,29 @@ func copyIncident(i *model.Incident) *model.Incident {
 		return nil
 	}
 	v := *i
+	if i.FlowResult != nil {
+		result := *i.FlowResult
+		v.FlowResult = &result
+	}
 	return &v
 }
 func (s *Server) eventLocked(kind string) {
 	e := model.Event{ID: id(), Type: kind, Service: "mayday", At: time.Now().UTC(), Incident: copyIncident(s.state.Incident), Observation: s.state.Observation, StackID: s.cfg.StackID}
+	if kind == "incident.opened" {
+		s.state.Incident.AttemptID = e.ID
+		s.state.Incident.FlowResult = nil
+		e.Incident = copyIncident(s.state.Incident)
+	}
 	if kind != "observation" {
 		s.state.History = append(s.state.History, e)
 		if len(s.state.History) > 100 {
 			s.state.History = s.state.History[len(s.state.History)-100:]
 		}
 	}
-	if s.cfg.WebhookURL != "" {
-		// Only the newest pending observation matters. Incident events retain order.
-		if kind == "observation" {
-			out := s.state.Outbox[:0]
-			for _, v := range s.state.Outbox {
-				if v.Type != "observation" {
-					out = append(out, v)
-				}
-			}
-			s.state.Outbox = out
-		}
+	if s.cfg.WebhookURL != "" && kind == "incident.opened" {
 		s.state.Outbox = append(s.state.Outbox, e)
 	}
-	s.persistLocked()
+	_ = s.persistLocked()
 }
 
 func (s *Server) Run(ctx context.Context) {
@@ -209,7 +223,7 @@ func (s *Server) Poll(ctx context.Context) {
 	s.totalLatency = 0
 	s.state.Observation = o
 	s.evaluateLocked(o)
-	s.eventLocked("observation")
+	_ = s.persistLocked()
 }
 
 func classify(o model.Observation) string {
@@ -378,7 +392,7 @@ func (s *Server) deliver(ctx context.Context) {
 				s.mu.Lock()
 				if err != nil {
 					s.state.DeliveryError = "Flows delivery failed; retrying"
-					s.persistLocked()
+					_ = s.persistLocked()
 					s.mu.Unlock()
 					break
 				}
@@ -389,7 +403,7 @@ func (s *Server) deliver(ctx context.Context) {
 						break
 					}
 				}
-				s.persistLocked()
+				_ = s.persistLocked()
 				s.mu.Unlock()
 			}
 		}
@@ -401,6 +415,7 @@ func (s *Server) Handler(ui http.Handler) http.Handler {
 	mux.Handle("/", ui)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	mux.HandleFunc("POST /api/login", s.auth.login)
+	mux.HandleFunc("POST /api/flows/result", s.flowResult)
 	api := http.NewServeMux()
 	api.HandleFunc("POST /api/logout", s.auth.logout)
 	api.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -449,6 +464,7 @@ func (s *Server) Handler(ui http.Handler) http.Handler {
 		}
 		s.state.Incident.Status = "open"
 		s.state.Incident.OpenedAt = time.Now().UTC()
+		s.state.Incident.Message = "Recovery retry requested; awaiting independent verification"
 		s.good = 0
 		s.eventLocked("incident.opened")
 		respond(w, 202, s.state.Incident)

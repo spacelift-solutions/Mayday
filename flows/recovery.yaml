@@ -73,7 +73,7 @@ blocks:
           stackId: mayday-service
     errorHandler: Catch orchestration errors
   - name: Authenticate monitor
-    description: Check the shared webhook token before accepting observations.
+    description: Check the shared webhook token before accepting recovery requests.
     type:
       coreBlock: condition
     position: [600, 180]
@@ -227,7 +227,7 @@ blocks:
           condition: !expr outputs.normalizeIncident.event.incident.kind === `dependency`
     errorHandler: Catch orchestration errors
   - name: Monitor webhook
-    description: Receives authenticated Mayday observations from the private EKS monitor over outbound HTTPS.
+    description: Receives authenticated incident requests; routine observations stay in the monitor.
     type:
       coreBlock: httpEndpoint
     position: !blockUnits [6, 0]
@@ -260,7 +260,7 @@ blocks:
           - $.headers.authorization
           - $.headers.Authorization
   - name: New incident
-    description: Telemetry and recovery observations update evidence; only incident.opened starts a run.
+    description: Only incident.opened starts a run. Accept legacy activity without dispatch during rollout.
     type:
       coreBlock: condition
     position: [600, 1620]
@@ -285,22 +285,6 @@ blocks:
     outputs:
       default:
         outputCustomization: !expr '({event: outputs.monitorWebhook.body, since: Date.now(), deadline: Date.now()+600000})'
-  - name: Read independent observation
-    description: Read the latest observation pushed by the monitor; no inbound access to the private target.
-    type:
-      coreBlock: memoryGet
-    position: [1650, 3260]
-    inputs:
-      default:
-        links:
-          - block: Diagnostic action
-            output: else
-          - block: Wait for next observation
-            output: default
-        config:
-          key: !expr outputs.normalizeIncident.event.incident.id
-          collection: mayday-observations
-    errorHandler: Catch orchestration errors
   - name: Read recovery outcome
     description: Check whether the attempt already reached a terminal outcome.
     type:
@@ -329,12 +313,10 @@ blocks:
             output: else
           - block: Still awaiting recovery
             output: then
-          - block: Verification deadline reached
-            output: then
         config:
           key: !expr Object(outputs).normalizeIncident.event.id
           collection: mayday-attempts
-          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`failed`,incident:Object(outputs).normalizeIncident.event.incident,run:Object(outputs).captureRunResult || null,reason:Object(outputs).catchOrchestrationErrors?.error?.message || (Object(outputs).captureRunResult?.state && Object(outputs).captureRunResult.state !== `FINISHED` ? `Spacelift run ended: ${Object(outputs).captureRunResult.state}` : `Recovery or verification timed out`),at:Date.now()})'
+          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`failed`,incident:Object(outputs).normalizeIncident.event.incident,run:Object(outputs).captureRunResult || null,reason:Object(outputs).catchOrchestrationErrors?.error?.message || (Object(outputs).captureRunResult?.state && Object(outputs).captureRunResult.state !== `FINISHED` ? `Spacelift run ended: ${Object(outputs).captureRunResult.state}` : `Recovery run timed out`),at:Date.now()})'
           ttl: 86400
   - name: Record recovery attempt
     description: Record a start marker before external side effects; ambiguous failures do not automatically repeat a repair.
@@ -352,20 +334,20 @@ blocks:
           value: !expr ({status:`starting`,incident:outputs.normalizeIncident.event.incident,since:outputs.normalizeIncident.since,deadline:outputs.normalizeIncident.deadline})
           ttl: 86400
     errorHandler: Catch orchestration errors
-  - name: Record verified recovery
-    description: Record success only after independent monitor evidence confirms recovery.
+  - name: Record successful run
+    description: Record orchestration success; only the monitor can verify recovery.
     type:
       coreBlock: memorySet
     position: [2000, 3620]
     inputs:
       default:
         links:
-          - block: Recovery verified
-            output: then
+          - block: Diagnostic action
+            output: else
         config:
           key: !expr outputs.normalizeIncident.event.id
           collection: mayday-attempts
-          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`recovered`,incident:outputs.normalizeIncident.event.incident,run:outputs.captureRunResult,observation:Object(outputs).readIndependentObservation.value.observation,at:Date.now()})'
+          value: !expr 'stored && Object(stored).status !== `starting` ? stored : ({status:`succeeded`,incident:outputs.normalizeIncident.event.incident,run:outputs.captureRunResult,at:Date.now()})'
           ttl: 86400
     errorHandler: Catch orchestration errors
   - name: Recovery deadline
@@ -380,26 +362,6 @@ blocks:
             output: default
         config:
           sleep: 600
-    errorHandler: Catch orchestration errors
-  - name: Recovery verified
-    description: Require matching incident, fresh healthy observation, completed requests, no errors, and acceptable latency.
-    type:
-      coreBlock: condition
-    position: [1650, 3440]
-    inputs:
-      default:
-        links:
-          - block: Read independent observation
-            output: default
-        config:
-          condition: !expr |-
-            (() => {
-            const e=Object(outputs).readIndependentObservation.value;
-            const n=outputs.normalizeIncident;
-            if(!e || e.incident?.id!==n.event.incident.id || e.incident?.status!=="recovered") return false;
-            const o=e.observation, at=Date.parse(o?.at), now=Date.now();
-            return now<n.deadline && Number.isFinite(at) && at>=n.since && now-at<15000 && at<=now+5000 && o.reachable && o.health?.status==="healthy" && o.samples>0 && o.errors===0 && o.latency_ms<=600;
-            })()
     errorHandler: Catch orchestration errors
   - name: Reject invalid event
     description: Return HTTP 400 for malformed or unsupported events.
@@ -437,8 +399,8 @@ blocks:
     inputs:
       default:
         links:
-          - block: Store observation
-            output: default
+          - block: First delivery
+            output: then
         config:
           key: !expr outputs.normalizeIncident.event.id
           collection: mayday-deliveries
@@ -591,22 +553,6 @@ blocks:
         config:
           condition: !expr outputs.readRecoveryOutcome.found && outputs.readRecoveryOutcome.value.status === `starting`
     errorHandler: Catch orchestration errors
-  - name: Store observation
-    description: Store the newest observation per incident. Older deliveries cannot replace newer health evidence.
-    type:
-      coreBlock: memorySet
-    position: !blockUnits [6, 9]
-    inputs:
-      default:
-        links:
-          - block: First delivery
-            output: then
-        config:
-          key: !expr outputs.normalizeIncident.event.incident?.id || `baseline`
-          collection: mayday-observations
-          value: !expr '!stored || Date.parse(Object(stored).at) <= Date.parse(outputs.normalizeIncident.event.at) ? outputs.normalizeIncident.event : stored'
-          ttl: 600
-    errorHandler: Catch intake errors
   - name: Validate observation
     description: Validate the Mayday event envelope, incident kind, and measured health fields.
     type:
@@ -628,38 +574,33 @@ blocks:
             if(e.incident && (!/^[a-f0-9]{24}$/.test(e.incident.id) || !["outage","dependency","capacity_up","capacity_down","reset"].includes(e.incident.kind) || !["open","recovering","recovered","failed"].includes(e.incident.status))) return false;
             return !e.type.startsWith("incident.") || Boolean(e.incident);
             })()
-  - name: Verification deadline reached
-    description: Bound the wait for health evidence to ten minutes from receipt.
+  - name: Report result to monitor
+    description: Push the durable attempt outcome to the monitor. Retry this delivery alone if it fails; never rerun the repair.
     type:
-      coreBlock: condition
-    position: [1650, 3620]
+      coreBlock: httpRequest
+    position: [1300, 4200]
     inputs:
       default:
         links:
-          - block: Recovery verified
-            output: else
+          - block: Record successful run
+            output: default
+          - block: Record failed recovery
+            output: default
+          - block: Evidence ready for Intelligence
+            output: default
         config:
-          condition: !expr Date.now() >= outputs.normalizeIncident.deadline
-    errorHandler: Catch orchestration errors
-  - name: Wait for next observation
-    description: Wait five seconds before checking the monitor evidence again.
-    type:
-      coreBlock: sleep
-    position: [1650, 3800]
-    inputs:
-      default:
-        links:
-          - block: Verification deadline reached
-            output: else
-        config:
-          sleep: 5
-    errorHandler: Catch orchestration errors
+          url: https://mayday-callback.invalid/api/flows/result
+          method: POST
+          headers:
+            Content-Type: application/json
+            Authorization: !expr '`Bearer ${secrets.MAYDAY_WEBHOOK_TOKEN}`'
+          body: !expr '({incident_id:previous.value.incident.id,attempt_id:outputs.normalizeIncident.event.id,status:previous.value.status,run_id:previous.value.run?.runId || "",run_state:previous.value.run?.state || ""})'
 notes:
   - body: |-
       # 1 · Receive and authenticate
       The Mayday monitor observes the private EC2 service from EKS. HTTP receives its bearer-token-authenticated events; native conditions validate them, Memory deduplicates deliveries, and only new incidents trigger action.
 
-      Observation and recovery events refresh the evidence used below.
+      Only new incidents and explicit retries reach Flows. Health checks and activity history stay local.
     position: !blockUnits [13, 0]
     style:
       width: 460
@@ -676,10 +617,10 @@ notes:
       height: 300
       color: '#0f172a'
   - body: |-
-      # 3 · Prove recovery
-      A successful run proceeds to independent monitor evidence. We require a fresh, healthy observation with traffic and no errors for the same recovered incident.
+      # 3 · Report the result
+      Push the completed run or failure to the monitor callback. Each result carries the incident ID and attempt event ID.
 
-      Poll every five seconds, up to ten minutes. Run failures, orchestration errors, and timeouts converge on a failed outcome.
+      The monitor verifies recovery locally with health probes and successful work. Flows never polls for observations. A single ten-minute timer bounds queued runs.
     position: [2027, 2900]
     style:
       width: 460
