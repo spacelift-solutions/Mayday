@@ -217,6 +217,8 @@ Never let both tools manage the same monitor objects.
 
 ## Walkthrough
 
+For a presentation that uses completed PR/plan/apply records and a staged Intent denial followed by correction, use [the staged demo guide](staged-demo.md).
+
 ### Show the deployment handoff
 
 Open the infrastructure stack, its outputs, and the dependency graph.
@@ -261,9 +263,10 @@ If the assistant needs a more specific repair prompt, use:
 Confirm the policy evaluation and operation history, then watch the independent monitor verify actual work requests.
 Repeat this scenario twice during rehearsal to confirm the same Intent resource can be repaired each time.
 
-For the explicit policy demonstration, ask Intent to delete the restored license.
-Show the server-side policy denial, then confirm the service stays healthy.
-Use an operator identity that can manage Intent resources but cannot edit policies; the administrator's broader permissions should not be presented as a restricted operator role.
+For the explicit policy demonstration, submit a repair with `enabled` set to the string `"true"`, show the server-side policy denial, then correct it to the boolean `true`.
+Follow the prompts in [the staged demo guide](staged-demo.md).
+Keep the existing policy in place for both attempts.
+The administrator's broader permissions should not be presented as a restricted operator role.
 
 ### Capacity
 
