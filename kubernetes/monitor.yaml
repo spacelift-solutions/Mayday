@@ -49,7 +49,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: monitor
-          image: ghcr.io/spacelift-solutions/mayday@sha256:f813de5cfa34d11a62fc3b2921632fdd72ccdc2036a2f43ba898f012d2e1486d
+          image: ghcr.io/spacelift-solutions/mayday@sha256:160670042d89882d4056f63a580194e3e32a81b6bbc0045788badbe07cd88339
           args: [monitor]
           ports:
             - name: http
