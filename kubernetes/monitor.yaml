@@ -60,6 +60,8 @@ spec:
             - secretRef:
                 name: mayday-control
           env:
+            - name: SESSION_COOKIE_SECURE
+              value: "true"
             - name: STATE_PATH
               value: /data/monitor.json
             - name: SERVICE_STACK_ID

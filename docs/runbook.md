@@ -52,12 +52,7 @@
    In the Flux repository, change `clusters/spacelift-solutions/mayday/workload.yaml` to `suspend: false` and merge after review.
    That resource points to `./kubernetes`; Flux discovers the plain manifests and decrypts the Secret using its existing Pod Identity.
    Verify `flux get sources git -n flux-system` and `flux get kustomizations -n flux-system` show Mayday Ready.
-10. Open the dashboard and sign in with the demo password:
-
-    ```sh
-    kubectl -n mayday port-forward service/mayday-monitor 8080:8080
-    ```
-
+10. Open <https://mayday.spacelift.shovel-emporium.com> and sign in with the demo password.
     Confirm health, two workers, Light traffic, webhook delivery, and a successful diagnostic run before presenting.
 
 There is no monitor Spacelift stack or Kubernetes provider in Mayday's OpenTofu configuration.
@@ -124,8 +119,10 @@ The demo password is exchanged for an HttpOnly, SameSite=Strict session cookie v
 Sign out revokes that session; a monitor restart invalidates all sessions.
 The browser does not store the password or an API token.
 The application rejects cross-origin browser mutations and limits failed login attempts.
-The default connection is a local HTTP port-forward.
-If the dashboard is exposed through HTTPS, set `SESSION_COOKIE_SECURE=true` on the monitor so the browser sends its cookie only over HTTPS.
+The deployed dashboard is available at <https://mayday.spacelift.shovel-emporium.com>.
+The ALB redirects HTTP to HTTPS, and the monitor sets `SESSION_COOKIE_SECURE=true` so the browser sends its cookie only over HTTPS.
+The login page and static assets are public; dashboard data and fault controls require a session.
+Use the public HTTPS URL for deployed sessions; local development keeps its separate HTTP configuration.
 The outbound Flows webhook and inbound callback use `FLOWS_WEBHOOK_TOKEN`, separate from dashboard sessions.
 The bearer token does not grant access to the operator API.
 
@@ -133,10 +130,10 @@ The bearer token does not grant access to the operator API.
 
 Keep the monitor scaled down and Flux reconciliation suspended while switching both sides.
 The public callback is `https://mayday.spacelift.shovel-emporium.com/api/flows/result`.
-The shared cluster already runs AWS Load Balancer Controller. Mayday provisions its
-ACM certificate in `infra/target/callback.tf` and its ALB Ingress in `kubernetes/callback.yaml`.
+The shared cluster already runs AWS Load Balancer Controller.
+Mayday provisions its ACM certificate in `infra/target/callback.tf` and its ALB Ingress in `kubernetes/callback.yaml`, shared by the dashboard and callback.
 
-1. Apply `demo/opentofu/aws/dns`, delegate `spacelift.shovel-emporium.com` from Cloudflare to its four Route 53 nameservers, and reconcile the ExternalDNS release in the Flux repository. Apply `mayday-infrastructure` to issue the ACM certificate using DNS validation. OpenTofu owns only the certificate validation CNAMEs; ExternalDNS owns the application alias and its ownership TXT record. The Ingress allows only HTTPS POST to the exact `/api/flows/result` path on `mayday/mayday-monitor:8080`; the dashboard and fault controls remain private. The ALB controller discovers the issued certificate from the Ingress hostname.
+1. Apply `demo/opentofu/aws/dns`, delegate `spacelift.shovel-emporium.com` from Cloudflare to its four Route 53 nameservers, and reconcile the ExternalDNS release in the Flux repository. Apply `mayday-infrastructure` to issue the ACM certificate using DNS validation. OpenTofu owns only the certificate validation CNAMEs; ExternalDNS owns the application alias and its ownership TXT record. The Ingress routes `/` and all child paths to `mayday/mayday-monitor:8080` over HTTPS and redirects HTTP to HTTPS. The application requires dashboard sessions for operator access and a separate bearer token for `POST /api/flows/result`. The ALB controller discovers the issued certificate from the Ingress hostname.
 2. Publish the updated monitor image and pin its digest in `kubernetes/monitor.yaml`. Keep replicas at zero until the Flow is updated. The callback uses the existing encrypted `FLOWS_WEBHOOK_TOKEN`; no new credential is needed.
 3. Set `TF_VAR_monitor_callback_url` on `mayday-flows` to `https://mayday.spacelift.shovel-emporium.com/api/flows/result`. The deployment root replaces the `.invalid` URL marker in the native definition with this required value. Do not apply an old export that lacks the callback block.
 4. Plan and confirm the Flow change. Preserve the Flow ID and Monitor webhook path. Verify that the observation storage and five-second verification loop are removed, and that **Report result to monitor** is linked to all three terminal outcome blocks.
@@ -289,7 +286,7 @@ Reset also returns load and capacity to the baseline; it is available only after
 - A missing or invalid license goes to diagnosis.
   Increasing worker capacity cannot repair it.
   S3 access-denied and timeout errors remain distinct evidence.
-- The dashboard is accessed by port-forward. Flows needs an HTTPS route to the callback path on the monitor; see [Flow callback rollout](#flow-callback-rollout).
+- The dashboard and Flow callback share the public HTTPS hostname, with separate session and bearer-token authentication; see [Dashboard access](#dashboard-access) and [Flow callback rollout](#flow-callback-rollout).
 
 ## Ownership and cleanup
 
