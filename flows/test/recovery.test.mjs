@@ -33,13 +33,30 @@ const sample = () => ({
     errors: 0, latency_ms: 200, health: { status: "healthy", workers: 2 } },
 });
 const context = event => ({ normalizeIncident: { event, since: now - 1000, deadline: now + 600000 } });
-const next = (name, output) => flow.blocks.filter(b => Object.values(b.inputs || {})
-  .some(i => (i.links || []).some(l => l.block === name && l.output === output)));
+function next(name, output, visited = new Set()) {
+  const key = `${name}:${output}`;
+  if (visited.has(key)) return [];
+  visited.add(key);
+  const result = [];
+  for (const block of flow.blocks) {
+    for (const [socket, input] of Object.entries(block.inputs || {})) {
+      if (!input.links?.some(l => l.block === name && l.output === output)) continue;
+      result.push(...(block.type.coreBlock === "group" ? next(block.name, socket, visited) : [block]));
+    }
+    if (block.type.coreBlock === "group") {
+      for (const [socket, value] of Object.entries(block.outputs || {})) {
+        if (value.links?.some(l => l.block === name && l.output === output)) result.push(...next(block.name, socket, visited));
+      }
+    }
+  }
+  return [...new Set(result)];
+}
 
 test("definition uses native blocks, valid links, and compilable expressions", () => {
   assert.equal(Object.keys(blocks).length, flow.blocks.length);
   for (const block of flow.blocks) {
     assert.ok(block.type.coreBlock);
+    if (block.group) assert.equal(blocks[block.group]?.type.coreBlock, "group");
     for (const socket of Object.values(block.inputs || {})) {
       for (const link of socket.links || []) assert.ok(blocks[link.block], link.block);
     }
@@ -51,6 +68,37 @@ test("definition uses native blocks, valid links, and compilable expressions", (
     else Object.values(value).forEach(check);
   }
   check(flow);
+});
+
+test("groups preserve webhook intake, acknowledgement, and the recovery deadline", () => {
+  assert.deepEqual(next("Monitor webhook", "requests").map(b => b.name), ["Authenticate monitor"]);
+  for (const name of ["Reject unauthorized", "Reject invalid event", "Acknowledge duplicate", "Accept observation", "Retry observation later"]) {
+    assert.ok(next(name, "default").some(b => b.name === "Monitor webhook"), name);
+  }
+  assert.deepEqual(next("Record recovery attempt", "default").map(b => b.name).sort(), ["Missing dependency", "Recovery deadline"]);
+  assert.equal(blocks["Authenticate monitor"].group, "Validate and accept");
+  assert.equal(blocks["Recovery deadline"].group, "Track and report");
+  for (const block of flow.blocks.filter(b => b.type.kind === "triggerRun")) assert.equal(block.group, undefined);
+});
+
+test("each run sends one started callback without polling or dispatching another action", () => {
+  const report = blocks["Report run started"];
+  for (const block of flow.blocks.filter(b => b.type.kind === "triggerRun")) {
+    assert.deepEqual(next(block.name, "started").map(b => b.name), [report.name]);
+    assert.deepEqual(next(block.name, "stateChanged"), []);
+  }
+  const event = sample();
+  const body = evaluate(input(report.name).body, { outputs: context(event), previous: { runId: "run-123", state: "QUEUED" } });
+  assert.equal(body.incident_id, event.incident.id);
+  assert.equal(body.attempt_id, event.id);
+  assert.equal(body.status, "started");
+  assert.equal(body.run_id, "run-123");
+  assert.equal(body.run_state, "QUEUED");
+  assert.equal(input(report.name).method, "POST");
+  assert.equal(input(report.name).url, input("Report result to monitor").url);
+  assert.equal(evaluate(input(report.name).headers.Authorization, { secrets: { MAYDAY_WEBHOOK_TOKEN: "test-token" } }), "Bearer test-token");
+  assert.equal(report.errorHandler, undefined);
+  assert.deepEqual(next(report.name, "default"), []);
 });
 
 test("webhook fails closed and accepts only the monitor token", () => {

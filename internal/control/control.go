@@ -24,6 +24,7 @@ import (
 
 type Config struct {
 	TargetURL, Password, WebhookURL, WebhookToken, StatePath, StackID string
+	FlowURL, SpaceliftURL, DiagnosticsStackID                         string
 	SecureCookies                                                     bool
 	PollInterval                                                      time.Duration
 	Failures, Recoveries                                              int
@@ -65,6 +66,15 @@ func New(cfg Config, store license.Store, faults Faults) (*Server, error) {
 	}
 	if len(cfg.Password) < 12 {
 		return nil, errors.New("DEMO_PASSWORD must contain at least 12 characters")
+	}
+	for name, value := range map[string]string{"FLOWS_UI_URL": cfg.FlowURL, "SPACELIFT_URL": cfg.SpaceliftURL} {
+		if value == "" {
+			continue
+		}
+		link, err := url.Parse(value)
+		if err != nil || link.Scheme != "https" || link.Host == "" || link.User != nil || link.RawQuery != "" || link.Fragment != "" {
+			return nil, fmt.Errorf("%s must be an HTTPS URL without credentials, query, or fragment", name)
+		}
 	}
 	if cfg.WebhookURL != "" {
 		w, e := url.Parse(cfg.WebhookURL)
@@ -421,7 +431,10 @@ func (s *Server) Handler(ui http.Handler) http.Handler {
 	api.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		respond(w, 200, s.state)
+		respond(w, 200, struct {
+			State
+			Navigation Navigation `json:"navigation"`
+		}{s.state, s.navigationLocked()})
 	})
 	api.HandleFunc("POST /api/traffic", func(w http.ResponseWriter, r *http.Request) {
 		var v struct {

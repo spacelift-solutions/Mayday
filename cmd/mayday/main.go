@@ -100,7 +100,7 @@ func run(ctx context.Context) error {
 		handler = s.Handler()
 		addr = env("LISTEN_ADDR", ":8081")
 	case "monitor":
-		s, err := control.New(control.Config{TargetURL: env("TARGET_URL", "http://127.0.0.1:8081"), Password: os.Getenv("DEMO_PASSWORD"), SecureCookies: env("SESSION_COOKIE_SECURE", "false") == "true", WebhookURL: os.Getenv("FLOWS_WEBHOOK_URL"), WebhookToken: os.Getenv("FLOWS_WEBHOOK_TOKEN"), StatePath: env("STATE_PATH", ".local/monitor.json"), StackID: env("SERVICE_STACK_ID", "mayday-service")}, store, faults)
+		s, err := control.New(control.Config{TargetURL: env("TARGET_URL", "http://127.0.0.1:8081"), Password: os.Getenv("DEMO_PASSWORD"), SecureCookies: env("SESSION_COOKIE_SECURE", "false") == "true", WebhookURL: os.Getenv("FLOWS_WEBHOOK_URL"), WebhookToken: os.Getenv("FLOWS_WEBHOOK_TOKEN"), StatePath: env("STATE_PATH", ".local/monitor.json"), StackID: env("SERVICE_STACK_ID", "mayday-service"), DiagnosticsStackID: env("DIAGNOSTICS_STACK_ID", "mayday-diagnostics"), FlowURL: os.Getenv("FLOWS_UI_URL"), SpaceliftURL: os.Getenv("SPACELIFT_URL")}, store, faults)
 		if err != nil {
 			return err
 		}

@@ -5,6 +5,9 @@ metadata:
   namespace: mayday
 data:
   AWS_REGION: us-east-1
+  FLOWS_UI_URL: "https://useflows.eu/flow/01a18e9c-62ac-7af4-9176-1a00ddbd5f2a"
+  SPACELIFT_URL: "https://spacelift-solutions.app.spacelift.io"
+  DIAGNOSTICS_STACK_ID: mayday-diagnostics
   TARGET_URL: "http://10.0.2.175:8081"
   TARGET_INSTANCE_ID: "i-0caaf940144f902b3"
   LICENSE_BUCKET: mayday-234878555361-us-east-1

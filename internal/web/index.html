@@ -120,12 +120,18 @@
               <dd id="queue">0</dd>
             </dl>
             <p id="delivery" role="alert"></p>
-            <div class="investigate">
-              <span class="eyebrow">START THE CONVERSATION</span>
-              <blockquote>“What’s happening with this service?”</blockquote>
-              <a id="stack-link" target="_blank" rel="noopener"
-                >Open the service in Spacelift ↗</a
-              >
+            <div id="follow-recovery" class="investigate">
+              <h2>Follow recovery</h2>
+              <p id="follow-status" role="status"></p>
+              <nav class="recovery-links" aria-label="Recovery navigation">
+                <a id="flow-link" target="_blank" rel="noopener noreferrer" hidden>Open recovery Flow ↗</a>
+                <a id="stack-link" target="_blank" rel="noopener noreferrer" hidden>Open service stack ↗</a>
+                <a id="run-link" target="_blank" rel="noopener noreferrer" hidden>Open recovery run ↗</a>
+              </nav>
+              <div id="investigate-prompt" hidden>
+                <span class="eyebrow">ASK INFRA ASSISTANT IN THE DIAGNOSTIC RUN</span>
+                <blockquote>“What’s happening with this service?”</blockquote>
+              </div>
             </div>
           </section>
         </div>

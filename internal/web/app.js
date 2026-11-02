@@ -1,7 +1,9 @@
 let signedIn = false,
   epoch = 0,
   rate = 2,
-  busy = false;
+  busy = false,
+  currentAttempt = "",
+  pendingAction = null;
 const el = (id) => document.getElementById(id),
   text = (id, value) => {
     el(id).textContent = value;
@@ -22,10 +24,41 @@ const kinds = {
   reset: "Restoring the baseline",
 };
 const flowStatuses = {
+  started: "Run started",
   succeeded: "Run finished",
   evidence_ready: "Diagnostic evidence ready",
   failed: "Recovery failed",
 };
+function link(id, url) {
+  const anchor = el(id);
+  anchor.hidden = !url;
+  if (url) anchor.href = url;
+  else anchor.removeAttribute("href");
+}
+function followRecovery(s) {
+  const i = s.incident,
+    nav = s.navigation || {};
+  currentAttempt = i?.attempt_id || "";
+  if (pendingAction && currentAttempt !== pendingAction.attempt) pendingAction = null;
+  const kind = pendingAction?.kind || i?.kind,
+    stack = pendingAction
+      ? kind === "dependency" ? nav.diagnostics_url : nav.service_url
+      : nav.stack_url,
+    run = pendingAction ? "" : nav.run_url;
+  link("flow-link", nav.flow_url);
+  link("stack-link", stack);
+  link("run-link", run);
+  text("stack-link", kind === "dependency" ? "Open diagnostics stack ↗" : "Open service stack ↗");
+  text("run-link", kind === "dependency" ? "Open diagnostic run ↗" : "Open recovery run ↗");
+  text("follow-status", pendingAction
+    ? "Waiting for the monitor to detect the incident. Follow the Flow while it starts recovery."
+    : run
+      ? "Open the exact run for this attempt. This dashboard continues checking service health."
+      : i
+        ? "Follow the Flow now. The run link appears when Spacelift starts the run."
+        : "Choose a fault or change traffic, then follow recovery here.");
+  el("investigate-prompt").hidden = kind !== "dependency";
+}
 function showSession(active) {
   signedIn = active;
   el("login-panel").hidden = active;
@@ -101,7 +134,8 @@ async function refresh() {
     );
     text("incident-id", i ? i.id : "None");
     text("incident-message", i?.message || "");
-    const result = i?.flow_result;
+    followRecovery(s);
+    const result = pendingAction ? null : i?.flow_result;
     text(
       "flow-result",
       result
@@ -135,10 +169,6 @@ async function refresh() {
         return li;
       }),
     );
-    const stack = history.find((e) => e.stack_id)?.stack_id || "mayday-service";
-    el("stack-link").href =
-      "https://spacelift-solutions.app.spacelift.io/stack/" +
-      encodeURIComponent(stack);
   } catch (e) {
     if (started !== epoch || !signedIn) return;
     text("connection", "DISCONNECTED");
@@ -149,9 +179,14 @@ async function refresh() {
 async function act(path, body = {}) {
   if (busy) return;
   busy = true;
+  const attempt = currentAttempt;
   try {
-    await api(path, body);
-    text("message", "Done.");
+    const response = await api(path, body);
+    if (path.startsWith("fault/") || path === "retry" || path === "reset") {
+      pendingAction = { attempt, kind: path === "fault/license" ? "dependency" : path === "retry" ? null : "outage" };
+      el("follow-recovery").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    text("message", response.status || "Traffic updated. Watch the service metrics and follow any recovery below.");
   } catch (e) {
     text("message", e.message);
   } finally {

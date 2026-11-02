@@ -45,7 +45,7 @@ type Incident struct {
 	Message    string      `json:"message"`
 }
 
-// FlowResult describes orchestration, never proof that the target recovered.
+// FlowResult reports orchestration, not independent proof of recovery.
 type FlowResult struct {
 	IncidentID string `json:"incident_id"`
 	AttemptID  string `json:"attempt_id"`

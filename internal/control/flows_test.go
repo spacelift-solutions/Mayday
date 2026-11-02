@@ -134,6 +134,62 @@ func TestFlowResultPersistsButDoesNotProveRecovery(t *testing.T) {
 	}
 }
 
+func TestStartedCallbackCanFinishAndCannotOverwriteTerminalResult(t *testing.T) {
+	for _, terminal := range []string{"succeeded", "failed"} {
+		t.Run(terminal, func(t *testing.T) {
+			s, result := callbackServer(t)
+			s.cfg.StatePath = filepath.Join(t.TempDir(), "state.json")
+			started := result
+			started.Status, started.RunState = "started", "QUEUED"
+			if w := callback(t, s, started); w.Code != 200 || s.state.Incident.Status != "open" {
+				t.Fatal("started callback must preserve the open incident")
+			}
+			restarted, err := New(s.cfg, &fakeStore{}, nil)
+			if err != nil || restarted.state.Incident.FlowResult.Status != "started" {
+				t.Fatal("started run did not persist")
+			}
+			s = restarted
+			if w := callback(t, s, started); !bytes.Contains(w.Body.Bytes(), []byte(`"duplicate":true`)) {
+				t.Fatal("duplicate start was not acknowledged")
+			}
+			result.Status = terminal
+			if terminal == "failed" {
+				result.RunID, result.RunState = "", ""
+			}
+			if w := callback(t, s, result); w.Code != 200 {
+				t.Fatal(w.Body.String())
+			}
+			if s.state.Incident.FlowResult.Status != terminal || s.state.Incident.FlowResult.RunID != started.RunID {
+				t.Fatal("terminal result must replace start and retain the run link")
+			}
+			callback(t, s, started)
+			if s.state.Incident.FlowResult.Status != terminal {
+				t.Fatal("delayed start overwrote terminal result")
+			}
+		})
+	}
+}
+
+func TestStartedCallbackValidationAndStaleAttempt(t *testing.T) {
+	s, result := callbackServer(t)
+	result.Status, result.RunState = "started", "QUEUED"
+	for _, field := range []string{"id", "state"} {
+		bad := result
+		if field == "id" {
+			bad.RunID = ""
+		} else {
+			bad.RunState = ""
+		}
+		if w := callback(t, s, bad); w.Code != 400 {
+			t.Fatal("incomplete start accepted")
+		}
+	}
+	result.AttemptID = "000000000000000000000000"
+	if w := callback(t, s, result); !bytes.Contains(w.Body.Bytes(), []byte(`"stale":true`)) || s.state.Incident.FlowResult != nil {
+		t.Fatal("stale start must not change the current attempt")
+	}
+}
+
 func TestFlowFailureRetryAndDelayedCallbacks(t *testing.T) {
 	s, result := callbackServer(t)
 	result.Status = "failed"

@@ -31,6 +31,11 @@ func (s *Server) flowResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch result.Status {
+	case "started":
+		if result.RunID == "" || result.RunState == "" {
+			respond(w, http.StatusBadRequest, map[string]string{"error": "Started result requires a run ID and state"})
+			return
+		}
 	case "succeeded", "evidence_ready":
 		if result.RunID == "" || result.RunState != "FINISHED" {
 			respond(w, http.StatusBadRequest, map[string]string{"error": "Successful result requires a finished run"})
@@ -54,14 +59,21 @@ func (s *Server) flowResult(w http.ResponseWriter, r *http.Request) {
 		respond(w, http.StatusBadRequest, map[string]string{"error": "Result does not match incident kind"})
 		return
 	}
-	if i.FlowResult != nil {
+	if i.FlowResult != nil && (i.FlowResult.Status != "started" || result.Status == "started") {
 		respond(w, http.StatusOK, map[string]bool{"accepted": true, "duplicate": true})
 		return
 	}
 	before := copyIncident(i)
+	if i.FlowResult != nil && result.RunID == "" {
+		// Deadline/error callbacks may omit run details. Keep the known run link.
+		result.RunID = i.FlowResult.RunID
+		result.RunState = i.FlowResult.RunState
+	}
 	i.FlowResult = &result
 	if i.Status != "recovered" && i.Status != "failed" {
 		switch result.Status {
+		case "started":
+			i.Message = "Spacelift run started; follow its progress while monitoring continues"
 		case "failed":
 			i.Status = "failed"
 			i.Message = "Flow recovery failed; inspect the Spacelift run before retrying"
