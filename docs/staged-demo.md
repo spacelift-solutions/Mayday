@@ -5,63 +5,60 @@
 Open the [Stacks view](https://spacelift-solutions.app.spacelift.io/stacks).
 Show the tool indicators on a few stacks, including OpenTofu and Ansible, before opening a specific application.
 
-> Spacelift supports multiple infrastructure tools in the same platform.
-> Each stack tracks a piece of code and brings together the inputs, credentials, policies, and run history needed to execute it.
-> This stack uses OpenTofu; this one uses Ansible.
-> The workflow is familiar across both, but the execution and output stay native to the tool.
-> You can provision infrastructure with one tool and configure it with another without building a separate operating model for each.
+- Multi-IaC support in one platform: OpenTofu, Ansible, and other tools.
+- Stack = tracked code, inputs, credentials, policies, and run history.
+- Consistent workflow; native execution and output for each tool.
+- Provision and configure infrastructure with the tools suited to each job.
 
 ## 2. The Developer Workflow
 
 Navigate to the [PRs tab in mayday-infrastructure](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/prs).
 
-> Think about a developer's normal workflow: they iterate on code locally, then open a pull request.
-> When that change affects code tracked by a stack, the PR appears here in that stack's PR view.
-> Spacelift runs a preview so the developer and reviewer can inspect the proposed changes before merging.
+- Developer workflow: local iteration → pull request.
+- Relevant code changes appear in the tracking stack's PR view.
+- Preview runs expose proposed changes before merge.
 
 Click into PR #15 from the stack's PR view and open its [completed preview run](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6F39M68Q4PQ57WVVPA2QAJG).
 Show initialization, planning, and the familiar OpenTofu output.
 Point out the proposed `Application = "mayday"` tag: zero additions, one in-place update, zero deletions.
 The [GitHub PR](https://github.com/spacelift-solutions/Mayday/pull/15) is available if you want to show its diff and checks.
 
-> The run takes the code through its execution phases, and policies evaluate the applicable inputs along the way.
-> For example, a plan policy can inspect the proposed infrastructure and deny a change that violates your rules.
-> Results can appear as Git checks so the developer can review them from the PR as well.
-> Once the developer is satisfied with the plan, policy results, and code review, they merge the PR.
-> That merge creates a tracked run against the merged commit.
+- Run phases: initialization, planning, and policy evaluation.
+- Plan policies inspect changes and can block violations.
+- Git checks bring results back to the developer's PR.
+- Review code, plan, and policy results → merge → tracked run.
 
 ## 3. Tracked Runs
 
 Open the [tracked runs view](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure), then [this completed tracked run](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6EYYNRV2JQ1CHDTNR6G2SPW).
 Use this earlier deployment to show the commit link, resource changes, run phases, policy results, confirmation, and apply output.
 
-> The tracked run gives you the full record of the deployment: which commit ran, what it planned, which controls evaluated it, and what happened during apply.
-> Merging does not bypass those controls.
-> A policy can stop a run before apply or require approval when a change needs a human decision.
-> You can also make a policy advisory, so it warns without blocking.
-> This infrastructure stack requires confirmation before apply; other stacks can apply automatically when their checks pass.
+- Deployment record: commit, resource changes, policies, approvals, and apply output.
+- Governance continues after merge.
+- Policies can block, require approval, or issue advisory warnings.
+- Manual confirmation here; automatic apply available for other workflows.
 
 On the prepared Wiz scan run, open **Plugins Output**.
 Show the findings, severity, affected file and line, and the report link where available.
 
-> Wiz adds security findings to the run, alongside the infrastructure plan.
-> The reviewer can see the evidence in Spacelift and follow the report into Wiz for more detail.
-> Plugins can connect other scanners, cost tools, approval systems, or internal services to this same workflow.
+- Wiz security findings alongside the infrastructure plan.
+- Findings in Spacelift; report links into Wiz.
+- Plugins connect scanners, cost tools, approvals, and internal services.
 
 Open the stack's [Contexts tab](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/contexts) and show the attached Wiz context without revealing secret values.
 Explain that contexts share configuration, environment variables, mounted files, and hooks across stacks.
 The `wiz` label attaches this plugin's context to the infrastructure stack.
 
-> Hooks are commands that run before or after an execution phase, such as initialization, planning, or apply.
-> A plugin uses those hooks to run its integration at the appropriate point and collect its results.
-> The context delivers the configuration and hooks to the stacks that need them, so we do not repeat that setup on every stack.
+- Hooks run commands before or after execution phases.
+- Plugins use hooks to execute integrations and collect results.
+- Contexts share configuration and hooks across stacks.
 
 Open the [Spaceforge Python framework](https://github.com/spacelift-io/plugins/blob/main/spaceforge/README.md).
 
-> Customers can build their own plugins in Python using Spaceforge.
-> They implement the hooks they need, define their configuration inputs, and generate the plugin manifest.
-> That could call an internal API, run a custom check, retrieve information, or automate another step around the deployment.
-> It gives them a way to package their own integrations and reuse them across stacks.
+- Spaceforge: Python framework for custom plugins.
+- Implement hooks, define inputs, generate the manifest.
+- Integrate internal APIs, custom checks, and automation.
+- Package once; reuse across stacks.
 
 Reference: [Spacelift hooks](https://docs.spacelift.io/concepts/stack/stack-settings#customizing-workflow).
 
@@ -69,19 +66,18 @@ Reference: [Spacelift hooks](https://docs.spacelift.io/concepts/stack/stack-sett
 
 Open [mayday-infrastructure's dependencies](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/dependencies) and follow the connection to `mayday-service`.
 
-> OpenTofu and Terraform are good at provisioning infrastructure, and Ansible is good at configuring it.
-> Connecting those tools yourself can become awkward.
-> If Ansible calls OpenTofu inside a task, the separate plan-and-review workflow gets buried inside the playbook.
-> If OpenTofu calls Ansible through a provisioner, Ansible's execution becomes harder to inspect as its own configuration workflow.
-> Stack dependencies let each tool run natively, with its own phases, output, and policies, while passing information between them.
+- OpenTofu/Terraform provision; Ansible configures.
+- Calling OpenTofu from Ansible buries the separate plan-and-review workflow.
+- Calling Ansible from a provisioner obscures its own execution workflow.
+- Dependencies pass data while preserving each tool's phases, output, and policies.
 
 Show the infrastructure stack's `inventory_tofu` output and its dependency reference to `TOFUSIBLE_INVENTORY` on the Ansible stack.
 Open [Tofusible](https://github.com/spacelift-solutions/tofusible) to show the inventory handoff.
 
-> Here, OpenTofu exports the machine information as a normal output using Tofusible.
-> Spacelift passes that output to the Ansible stack.
-> Ansible's dynamic inventory consumes it, and the playbook uses the resulting hosts normally.
-> We keep the OpenTofu plan and apply visible, and we keep Ansible's tasks and host-level troubleshooting visible too.
+- Tofusible packages machine information as a native OpenTofu output.
+- Dependency passes the output into Ansible's dynamic inventory.
+- Playbooks consume the resulting hosts normally.
+- Visibility into both infrastructure changes and Ansible tasks/hosts.
 
 Open [this completed dependency-triggered Ansible run](https://spacelift-solutions.app.spacelift.io/stack/mayday-service/run/01M679PH06WWZNCMFDMKZGN843) and its Tasks view.
 Show the inventory host and an individual task's output before moving into self-service.
@@ -91,8 +87,8 @@ Show the inventory host and an individual task's output before moving into self-
 Open **Templates**, select **Mayday sandbox license**, and show the instructions and license-key input.
 For an authoring view, open its published version in **Templates Workbench** and show the form, stack definition, cloud integration, and attached plan policy.
 
-> The platform team provides the implementation and controls.
-> The consumer fills out a form without writing infrastructure code.
+- Platform team owns implementation and controls.
+- Consumer requests infrastructure through a form.
 
 Create a deployment and enter `INVALID` as the license key.
 Version 1.1.0 adds the deployment's creation timestamp to the stack name and object key, keeping the suffix stable when correcting inputs.
@@ -136,21 +132,18 @@ The diagnostic failure is expected when the license is invalid.
 
 ## 8. Ask what is wrong and repair through Intent
 
-Ask Infra Assistant:
-
-> What's happening with this service?
-
-Let the assistant diagnose the evidence, then ask:
-
-> Fix it using Intent.
+- Diagnosis prompt: `What's happening with this service?`
+- After diagnosis, repair prompt: `Fix it using Intent.`
 
 Intelligence investigates; Intent performs the governed resource update.
 The repair must update the existing `mayday-license` resource in the **Mayday license** project.
-If a more specific prompt is needed:
+Optional detailed repair prompt:
 
-> Refresh the existing mayday-license resource, then update that same resource with the valid checked-in demo-license.json content, including its trailing newline, and ETag 0ddb3ebffccfbffc98c50fbbcfd18fdc.
-> Preserve its bucket/key, empty ACL, and AES256 encryption.
-> Check live service health afterward.
+```text
+Refresh the existing mayday-license resource, then update that same resource with the valid checked-in demo-license.json content, including its trailing newline, and ETag 0ddb3ebffccfbffc98c50fbbcfd18fdc.
+Preserve its bucket/key, empty ACL, and AES256 encryption.
+Check live service health afterward.
+```
 
 Show the operation history, then return to Mayday for independently observed recovery.
 We have now shown both a governed self-service request and a repair through Intent.
@@ -161,9 +154,9 @@ Open [Mayday recovery](https://useflows.eu/flow/01a18e9c-62ac-7af4-9176-1a00ddbd
 Keep **Validate and accept** and **Track and report** collapsed.
 Show the webhook trigger, service-outage branch, and capacity branches.
 
-> Flows connects an operational event to the appropriate action.
-> The monitor sends a new incident; Flows selects the repair, triggers Spacelift, and reports the result back.
-> Routine health checks stay in the monitor and do not invoke Flows.
+- Event-driven orchestration: incident → repair → Spacelift run → result callback.
+- Branches select the action for each incident type.
+- Routine health checks stay local; no idle Flow invocations.
 
 ## 10. Cause an outage and follow automatic recovery
 
@@ -172,7 +165,8 @@ Use **Open recovery Flow** to show the new invocation, then **Open recovery run*
 Show that the Ansible stack was triggered by Flows automatically.
 Return to Mayday and watch it recover.
 
-> A successful automation run is useful evidence, but the monitor waits for the service to complete requests successfully before declaring recovery.
+- Run success provides execution evidence.
+- Successful service requests independently confirm recovery.
 
 ## 11. Increase and decrease traffic
 
