@@ -94,6 +94,7 @@ For an authoring view, open its published version in **Templates Workbench** and
 > The consumer fills out a form without writing infrastructure code.
 
 Create a deployment and enter `INVALID` as the license key.
+Version 1.1.0 adds the deployment's creation timestamp to the stack name and object key, keeping the suffix stable when correcting inputs.
 This creates a sandbox request under `license-requests/`; it does not replace the service's live license owned by Intent.
 To avoid a planning wait, use the prepared **Mayday license demo** deployment and its recorded denied run in step 8.
 
