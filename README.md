@@ -1,5 +1,7 @@
 # Mayday
 
+**[Demo walkthrough](docs/staged-demo.md)**: stacks, PRs, Wiz, Intent repair, self-service policy enforcement, and Flows recovery.
+
 An incident and recovery story for Spacelift.
 Use Mission Control to stop a service, invalidate its license, or increase traffic.
 An independent monitor detects the effects and sends only new incidents or explicit retries to Flows.
