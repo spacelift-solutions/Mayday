@@ -217,7 +217,7 @@ Never let both tools manage the same monitor objects.
 
 ## Walkthrough
 
-For a presentation that uses completed PR/plan/apply records and a staged Intent denial followed by correction, use [the staged demo guide](staged-demo.md).
+For a presentation that starts with an open PR and a completed preview plan, then demonstrates Intent denial followed by correction, use [the staged demo guide](staged-demo.md).
 
 ### Show the deployment handoff
 

@@ -1,28 +1,35 @@
 # Mayday demo without deployment waits
 
-Use completed runs for the developer workflow, then switch to live incident recovery.
+Start with an open PR whose preview plan has already finished, then switch to live incident recovery.
 Open the linked tabs before the call.
-Say that the deployment completed ahead of time; the PR, plan, apply, and policy results are real records.
+Keep [PR #15](https://github.com/spacelift-solutions/Mayday/pull/15) open before the presentation.
+The PR proposes a new change; the running application was deployed earlier.
 
-## 1. Walk through a completed deployment (2–3 minutes)
+## 1. Review a staged PR and its completed plan (2–3 minutes)
 
 | Open | Show and explain |
 | --- | --- |
-| [Mayday PR #7](https://github.com/spacelift-solutions/Mayday/pull/7) | A developer changes license fault injection from deleting the object to disabling its content. Show the diff, review, and checks. |
-| [Completed PR plan](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6EYW5TB6T529R9409C3X7GB) | Open the plan output. The monitor IAM permission changes from `s3:DeleteObject` to `s3:PutObject` for the designated license object. This preview did not apply the change. |
-| [Completed tracked apply](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6EYYNRV2JQ1CHDTNR6G2SPW) | The merged commit produced a tracked run. Show its plan and completed apply. |
+| [Open Mayday PR #15](https://github.com/spacelift-solutions/Mayday/pull/15) | A developer adds `Application = "mayday"` to the EC2 target's tags. Show the small diff, PR checks, and review controls. Keep it unmerged for reuse. |
+| [PR #15 preview plan](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6F39M68Q4PQ57WVVPA2QAJG) | Show the planned tag update on the existing instance. The preview has not applied the change. |
 | [Infrastructure stack](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure) | Show the dependency graph and `inventory_tofu` output passed as `TOFUSIBLE_INVENTORY` to Ansible. |
-| [Completed dependency-triggered Ansible deployment](https://spacelift-solutions.app.spacelift.io/stack/mayday-service/run/01M679PH06WWZNCMFDMKZGN843) | Show Ansible's Tasks view. This is an earlier deployment that was actually triggered by the infrastructure dependency; distinguish it from the PR #7 runs triggered by Git. |
+| [Existing Ansible deployment](https://spacelift-solutions.app.spacelift.io/stack/mayday-service/run/01M679PH06WWZNCMFDMKZGN843) | Show Ansible's Tasks view from the earlier dependency-triggered deployment. This explains how the running service was configured; it is not an apply of PR #15. |
 
 Talk track:
 
-> I ran this deployment before our call so we can spend our time on the decisions.
-> Here is the proposed change and its plan, followed by the merged commit and apply.
+> I opened this PR before our call so its plan is ready for review.
+> The developer wants to label this instance with the application it belongs to.
+> We can inspect the exact proposed change before merging anything.
+> Merging starts a tracked run; this infrastructure stack requires confirmation before apply.
 > OpenTofu provisions the infrastructure and passes inventory to Ansible, which configures the service.
-> Each tool keeps its own run history and execution view.
+> That deployment is already running, so let's see how we operate it when something breaks.
 
-These records show review, planning, deployment, and the handoff between tools.
-They do not contain a staged Deploy policy rejection or security scanner finding.
+The main walkthrough leaves the PR open and does not wait for a new deployment.
+If you choose to demonstrate merging, do so after the incident scenarios; review and confirm the resulting infrastructure run separately.
+Do not inject faults while a deployment is changing the target.
+Once PR #15 is merged or closed, prepare a fresh small change and completed preview before the next demo rather than presenting a merged PR as pending review.
+
+If someone asks to see completed apply output, open [this earlier infrastructure apply](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6EYYNRV2JQ1CHDTNR6G2SPW) and identify it as historical.
+The staged tag change does not demonstrate a Deploy policy rejection or security scanner finding.
 
 ## 2. Recover a service outage live
 
