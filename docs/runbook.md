@@ -126,6 +126,13 @@ Use the public HTTPS URL for deployed sessions; local development keeps its sepa
 The outbound Flows webhook and inbound callback use `FLOWS_WEBHOOK_TOKEN`, separate from dashboard sessions.
 The bearer token does not grant access to the operator API.
 
+The **Follow recovery** panel links to the recovery Flow, the relevant stack, and the exact run for the current attempt.
+`FLOWS_UI_URL` selects the Flow canvas, while `SPACELIFT_URL`, `SERVICE_STACK_ID`, and `DIAGNOSTICS_STACK_ID` select the Spacelift destinations.
+License incidents link to diagnostics; outage, capacity, and reset incidents link to the service stack.
+After a fault request, the panel waits for independent detection and hides the previous attempt's run link.
+Flows sends one callback when a run starts so its link appears before completion, then sends the terminal outcome.
+The monitor never polls Flows or Spacelift for navigation.
+
 ## Flow callback rollout
 
 Keep the monitor scaled down and Flux reconciliation suspended while switching both sides.
@@ -151,15 +158,19 @@ Mayday provisions its ACM certificate in `infra/target/callback.tf` and its ALB 
 }
 ```
 
-Statuses are `succeeded`, `evidence_ready` (diagnostics only), or `failed`.
+Statuses are `started`, `succeeded`, `evidence_ready` (diagnostics only), or `failed`.
+Started callbacks require a run ID and state and are persisted without marking the incident recovered.
 Successful results require a run ID and `FINISHED`; errors or timeouts before a run starts may omit run fields.
 The first terminal result for the current attempt is persisted and shown on the dashboard.
+It replaces a started result; delayed started callbacks cannot overwrite a terminal outcome.
+If a timeout callback omits run details, the monitor retains the run link received earlier.
 Duplicate and stale callbacks return 200 without changing the current result. Explicit retries create a new attempt ID.
 A callback never declares the target recovered: sustained successful local probes and work requests remain the only recovery evidence.
 Late results cannot reopen recovered incidents or clear monitor timeouts.
 
 Malformed results return 400, invalid credentials return 401, and persistence failures return 503 so delivery can be retried.
-If callback delivery fails (including a non-2xx response), inspect **Report result to monitor** and retry that input event after fixing connectivity. Do not replay incident intake or the Spacelift action to resend a result.
+If callback delivery fails (including a non-2xx response), inspect **Report run started** or **Report result to monitor** and retry only that callback input after fixing connectivity.
+Do not replay incident intake or the Spacelift action to resend a result.
 The durable `mayday-attempts` result is retained for 24 hours. Callback delivery failures must not be routed into **Catch orchestration errors**, which would confuse transport failure with repair failure.
 
 ## Bootstrap and ownership
@@ -215,6 +226,7 @@ Show the Go service and the monitor's deployment on the shared cluster.
 ### Service outage
 
 Click **Cause outage**.
+Use **Open recovery Flow**, then **Open recovery run** in the dashboard's **Follow recovery** panel as the run starts.
 The monitor asks SSM to execute only the fixed `MaydayStopService` document.
 The button does not open an incident directly.
 After sustained failed probes, the incident event takes the restart branch in Flows.
@@ -226,7 +238,7 @@ Click **Invalidate license**.
 The Kubernetes monitor writes `enabled: false` to the designated S3 object, keeping its bucket, key, and Intent resource identity intact.
 The target keeps its process and diagnostic endpoint alive, but readiness and work requests fail.
 
-Open the resulting `mayday-diagnostics` run.
+Use **Open diagnostic run** in the dashboard to open the resulting `mayday-diagnostics` run.
 Ask Infra Assistant:
 
 > What's happening with this service?
