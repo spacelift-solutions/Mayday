@@ -1,150 +1,156 @@
 # Mayday demo walkthrough
 
-Follow this order: stacks, PR and Wiz, tracked run, dependencies, Intent repair, Templates and policy, then Flows outage and capacity recovery.
-Prepare the slow runs before presenting and leave [PR #15](https://github.com/spacelift-solutions/Mayday/pull/15) open.
-Historical runs below are completed examples; distinguish them from the pending PR.
+## 1. Stack the Basics
 
-## 1. Show the stacks
+Open the [Stacks view](https://spacelift-solutions.app.spacelift.io/stacks).
+Show the tool indicators on a few stacks, including OpenTofu and Ansible, before opening a specific application.
 
-Start in the Spacelift stacks view and filter on `mayday`.
+- Multi-IaC support in one platform: OpenTofu, Ansible, and other tools.
+- Stack = tracked code, inputs, credentials, policies, and run history.
+- Consistent workflow; native execution and output for each tool.
+- Provision and configure infrastructure with the tools suited to each job.
 
-| Stack | Purpose |
-| --- | --- |
-| [mayday-infrastructure](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure) | OpenTofu provisions the target, license bucket, and access controls. |
-| [mayday-service](https://spacelift-solutions.app.spacelift.io/stack/mayday-service) | Ansible installs and repairs the application and changes worker capacity. |
-| [mayday-diagnostics](https://spacelift-solutions.app.spacelift.io/stack/mayday-diagnostics) | Ansible gathers evidence when the application has a dependency failure. |
-| [mayday-flows](https://spacelift-solutions.app.spacelift.io/stack/mayday-flows) | Manages the recovery Flow as code. |
+## 2. The Developer Workflow
 
-> A stack brings together the code, inputs, credentials, policies, and run history for a deployment.
-> Each tool keeps its own execution experience.
+Navigate to the [PRs tab in mayday-infrastructure](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/prs).
 
-## 2. Show the infrastructure PR and Wiz
+- Developer workflow: local iteration → pull request.
+- Relevant code changes appear in the tracking stack's PR view.
+- Preview runs expose proposed changes before merge.
 
-Open [PR #15](https://github.com/spacelift-solutions/Mayday/pull/15).
-Show the change adding `Application = "mayday"` to the existing target's tags.
-Open its [completed preview plan](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6F39M68Q4PQ57WVVPA2QAJG): zero additions, one in-place change, zero deletions.
-Nothing from this PR has been applied.
+Click into PR #15 from the stack's PR view and open its [completed preview run](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6F39M68Q4PQ57WVVPA2QAJG).
+Show initialization, planning, and the familiar OpenTofu output.
+Point out the proposed `Application = "mayday"` tag: zero additions, one in-place update, zero deletions.
+The [GitHub PR](https://github.com/spacelift-solutions/Mayday/pull/15) is available if you want to show its diff and checks.
 
-> I opened the PR ahead of time so we can review the plan immediately.
-> The developer can see what will change before merging.
+- Run phases: initialization, planning, and policy evaluation.
+- Plan policies inspect changes and can block violations.
+- Git checks bring results back to the developer's PR.
+- Review code, plan, and policy results → merge → tracked run.
 
-The infrastructure stack has the `wiz` label, which attaches the account's existing Wiz plugin.
-Use a completed run with a successful Wiz scan and open **Plugins Output** to show findings, severity, affected files, and the report link where available.
-The installed plugin is `wiz-no-policies`: its findings are not a demonstration of a blocking security policy.
-The separate plan policy in step 8 provides the explicit enforcement example.
+## 3. Tracked Runs
 
-Wiz preparation: the first fresh scan run, `01M6F4ZKWR68NP9G5SV00361QM`, failed because Wiz rejected the installed client credentials.
-Refresh the installed plugin's credentials, start a fresh preview of PR #15's commit, and use that completed scan for presentation.
-The earlier completed preview above predates Wiz attachment and has no Wiz findings to show.
+Open the [tracked runs view](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure), then [this completed tracked run](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6EYYNRV2JQ1CHDTNR6G2SPW).
+Use this earlier deployment to show the commit link, resource changes, run phases, policy results, confirmation, and apply output.
 
-## 3. Explain merge to tracked run
+- Deployment record: commit, resource changes, policies, approvals, and apply output.
+- Governance continues after merge.
+- Policies can block, require approval, or issue advisory warnings.
+- Manual confirmation here; automatic apply available for other workflows.
 
-Keep PR #15 open for reuse.
-Open [this completed tracked infrastructure run](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/run/01M6EYYNRV2JQ1CHDTNR6G2SPW), which came from an earlier merged change.
-Show the commit, plan, confirmation, and apply output.
+On the prepared Wiz scan run, open **Plugins Output**.
+Show the findings, severity, affected file and line, and the report link where available.
 
-> When a PR is merged, Spacelift creates a tracked run against the merged commit.
-> This is a previously completed example so we do not need to wait for a new deployment.
-> This infrastructure stack requires confirmation before applying.
+- Wiz security findings alongside the infrastructure plan.
+- Findings in Spacelift; report links into Wiz.
+- Plugins connect scanners, cost tools, approvals, and internal services.
 
-## 4. Show the dependency to Ansible
+Open the stack's [Contexts tab](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/contexts) and show the attached Wiz context without revealing secret values.
+Explain that contexts share configuration, environment variables, mounted files, and hooks across stacks.
+The `wiz` label attaches this plugin's context to the infrastructure stack.
 
-Open the infrastructure stack's dependency graph and follow `mayday-service`.
-Show `inventory_tofu` passing into `TOFUSIBLE_INVENTORY`.
+- Hooks run commands before or after execution phases.
+- Plugins use hooks to execute integrations and collect results.
+- Contexts share configuration and hooks across stacks.
+
+- [Spaceforge](https://github.com/spacelift-io/plugins/blob/main/spaceforge/README.md): Python framework for custom plugins.
+- Implement hooks, define inputs, generate the manifest.
+- Integrate internal APIs, custom checks, and automation.
+- Package once; reuse across stacks.
+
+Reference: [Spacelift hooks](https://docs.spacelift.io/concepts/stack/stack-settings#customizing-workflow).
+
+## 4. Stack Dependencies
+
+Open [mayday-infrastructure's dependencies](https://spacelift-solutions.app.spacelift.io/stack/mayday-infrastructure/dependencies) and follow the connection to `mayday-service`.
+
+- OpenTofu/Terraform provision; Ansible configures.
+- Calling OpenTofu from Ansible buries the separate plan-and-review workflow.
+- Calling Ansible from a provisioner obscures its own execution workflow.
+- Dependencies pass data while preserving each tool's phases, output, and policies.
+
+Show the infrastructure stack's `inventory_tofu` output and its dependency reference to `TOFUSIBLE_INVENTORY` on the Ansible stack.
+Open [Tofusible](https://github.com/spacelift-solutions/tofusible) to show the inventory handoff.
+
+- Tofusible packages machine information as a native OpenTofu output.
+- Dependency passes the output into Ansible's dynamic inventory.
+- Playbooks consume the resulting hosts normally.
+- Visibility into both infrastructure changes and Ansible tasks/hosts.
+
 Open [this completed dependency-triggered Ansible run](https://spacelift-solutions.app.spacelift.io/stack/mayday-service/run/01M679PH06WWZNCMFDMKZGN843) and its Tasks view.
+Show the inventory host and an individual task's output before moving into self-service.
 
-> OpenTofu provisions the machine and passes inventory to Ansible.
-> Ansible configures the service while keeping its native task output and troubleshooting view.
+## 5. Self Service
 
-## 5. Break the license
+- Platform team owns implementation and controls.
+- Consumer requests infrastructure through a form.
 
-Open [Mayday](https://mayday.spacelift.shovel-emporium.com) and sign in.
-Start with Healthy, a valid license, two workers, and Light traffic.
-Click **Invalidate license** and wait for the dependency incident.
-Open **Open diagnostic run** and show the failed diagnostic task's evidence.
-The diagnostic failure is expected when the license is invalid.
+1. Open [Templates](https://spacelift-solutions.app.spacelift.io/templates) and select **Mayday sandbox license**.
+2. Create a new license deployment with license key `INVALID`.
+3. Open the deployment's stack and failed run; show the plan policy denial.
+   - Policy checks the requested license before apply.
+   - Required values: `license_key: DEMO-ONLY`, `service: mayday`, `enabled: true`.
+4. Open [Templates Workbench](https://spacelift-solutions.app.spacelift.io/templates-workbench) and select **Mayday sandbox license**.
+   - Show the form, stack definition, cloud integration, and attached policy.
+   - Publish new template versions; update existing deployments to roll out changes.
+5. Return to the failed deployment, click **three dots → Update deployment**, and change the license key to `DEMO-ONLY`.
+6. Show the new run passing the same policy, then open **Outputs** for the S3 URI and license JSON.
 
-## 6. Ask what is wrong and repair through Intent
+## 6. Intent
 
-Ask Infra Assistant:
+Open [Mayday](https://mayday.spacelift.shovel-emporium.com).
+Set the scene before breaking anything:
 
-> What's happening with this service?
+- Demo scenario: a shop selling Spacelift swag, with incoming customer requests.
+- Mayday simulates the workload and gives us monitoring, traffic controls, and fault injection.
+- Deploy and Flows handle recovery; the dashboard shows the service's actual health.
 
-Let the assistant diagnose the evidence, then ask:
+Copy the login password to the macOS clipboard using cluster access, then paste it into Mayday:
 
-> Fix it using Intent.
-
-Intelligence investigates; Intent performs the governed resource update.
-The repair must update the existing `mayday-license` resource in the **Mayday license** project.
-If a more specific prompt is needed:
-
-> Refresh the existing mayday-license resource, then update that same resource with the valid checked-in demo-license.json content, including its trailing newline, and ETag 0ddb3ebffccfbffc98c50fbbcfd18fdc.
-> Preserve its bucket/key, empty ACL, and AES256 encryption.
-> Check live service health afterward.
-
-Show the operation history, then return to Mayday for independently observed recovery.
-The next step demonstrates a policy denial through the self-service form, so there is no need to manufacture an AI mistake here.
-
-## 7. Request a license through a Template
-
-Open **Templates**, select **Mayday sandbox license**, and show the instructions and license-key input.
-For an authoring view, open its published version in **Templates Workbench** and show the form, stack definition, cloud integration, and attached plan policy.
-
-> The platform team provides the implementation and controls.
-> The consumer fills out a form without writing infrastructure code.
-
-Create a deployment and enter `INVALID` as the license key.
-Version 1.1.0 adds the deployment's creation timestamp to the stack name and object key, keeping the suffix stable when correcting inputs.
-Use version 1.2.0 for disposable demos: one hour after creation, it deletes the deployment, stack, and sandbox object.
-The shared bucket and Intent's live `license/demo-license.json` are outside that stack and remain intact.
-The policy rejects the reserved deployment name `demo-license`, including timestamped variants.
-The prepared older deployments keep their history because they have no automatic deletion schedule.
-This creates a sandbox request under `license-requests/`; it does not replace the service's live license owned by Intent.
-To avoid a planning wait, use the prepared **Mayday license demo** deployment and its recorded denied run in step 8.
-
-Prepared records: [denied request](https://spacelift-solutions.app.spacelift.io/stack/mayday-license-mayday-license-demo/run/01M6F4Z95QEPG78R7ZAYTYEKH0), then [successful correction](https://spacelift-solutions.app.spacelift.io/stack/mayday-license-mayday-license-demo/run/01M6F552KDFE936AAZ4ZWCJPJH).
-
-## 8. Show the denial, correct the input, and rerun
-
-Open the deployment's stack and its failed run.
-The **Mayday sandbox license requests** plan policy rejects the proposed object before apply:
-
-```text
-Mayday sandbox licenses require license_key DEMO-ONLY, service mayday, and enabled true
+```sh
+kubectl --context spacelift-solutions -n mayday get secret mayday-control \
+  -o jsonpath='{.data.DEMO_PASSWORD}' | base64 --decode | pbcopy
 ```
 
-Show the policy evaluation and source condition checking the proposed JSON content.
-You are changing the requested license value, not changing the policy.
+- Intent manages resources from a natural-language request.
+- Policies govern the proposed changes.
+- Operation history records the repair; live service health confirms the result.
 
-Return to the same deployment, choose **Update deployment**, and change the license key to `DEMO-ONLY`.
-Keep the deployment name unchanged and submit.
-This updates the same stack and starts a new tracked run; the unchanged policy accepts the valid content.
-After apply, open the deployment's **Outputs** to show the S3 URI and license JSON.
+1. Start with **Healthy**, a valid license, **two workers**, and **Light** traffic.
+2. Click **Invalidate license** and wait for the dependency incident.
+3. Click **Open diagnostic run** and show the failed task's evidence.
+   - Diagnostic failure is expected with an invalid license.
+4. Ask the Assistant: `What's happening with this service?`
+5. After diagnosis, ask: `Fix it using Intent.`
+   - Intelligence investigates; Intent updates the existing `mayday-license` resource in the **Mayday license** project.
+6. Show the operation history, then return to Mayday and watch recovery.
 
-For a presentation without waiting, show the staged denied and corrected runs instead of submitting again.
-For a live run, move on to explaining Flows while it executes, then return to show the result.
-Updating deployment inputs is the supported workflow; see [the Templates Workbench guide](https://docs.spacelift.io/concepts/template/workbench).
-
-## 9. Explain Flows
+## 7. Flows
 
 Open [Mayday recovery](https://useflows.eu/flow/01a18e9c-62ac-7af4-9176-1a00ddbd5f2a).
 Keep **Validate and accept** and **Track and report** collapsed.
 Show the webhook trigger, service-outage branch, and capacity branches.
 
-> Flows connects an operational event to the appropriate action.
-> The monitor sends a new incident; Flows selects the repair, triggers Spacelift, and reports the result back.
-> Routine health checks stay in the monitor and do not invoke Flows.
+- Event-driven orchestration: incident → repair → Spacelift run → result callback.
+- Apps provide reusable blocks for services and integrations; connect blocks to build a Flow.
+- Open-source apps, such as the [GitHub app](https://github.com/spacelift-flows-apps/flows-app-github), can be inspected and extended.
+- [Node.js runtime](https://docs.spacelift.io/flows/apps) for app code; JavaScript expressions configure dynamic block values.
+- Copy/paste Flow definitions between the canvas and YAML; reuse individual blocks or an entire Flow.
+- Manage Flows, app installations, and secrets with the [OpenTofu provider](https://docs.spacelift.io/flows/automating-flows/flows-tf-provider); review changes in Git.
+- Branches select the action for each incident type.
+- Routine health checks stay local; no idle Flow invocations.
 
-## 10. Cause an outage and follow automatic recovery
+## 8. Cause an outage and follow automatic recovery
 
 Once the license incident is recovered, click **Cause outage**.
 Use **Open recovery Flow** to show the new invocation, then **Open recovery run** when it appears.
 Show that the Ansible stack was triggered by Flows automatically.
 Return to Mayday and watch it recover.
 
-> A successful automation run is useful evidence, but the monitor waits for the service to complete requests successfully before declaring recovery.
+- Run success provides execution evidence.
+- Successful service requests independently confirm recovery.
 
-## 11. Increase and decrease traffic
+## 9. Increase and decrease traffic
 
 Select **Heavy** and show the rising queue, latency, and rejected requests.
 Follow the Flow as it sets `WORKERS=8` and triggers Ansible.
@@ -157,8 +163,18 @@ Finish with Healthy, a valid license, Light traffic, and two workers.
 ## Presenter preparation and source
 
 - Keep PR #15 open; prepare a fresh small PR and finished preview if it is merged or closed.
-- Complete the Wiz credential repair and stage a successful scan before promising findings.
-- Keep the denied and corrected Template runs ready so plan time does not interrupt the story.
+- Wiz scan `01M6F4ZKWR68NP9G5SV00361QM` failed authentication. Refresh the installed credentials and stage a successful scan before presenting Plugins Output; the older linked runs have no Wiz results.
+- The installed `wiz-no-policies` plugin supplies scan output without a blocking policy. Use the Template plan policy in step 5 to demonstrate an explicit denial.
 - Resolve one application incident before starting the next; do not inject faults during an application deployment.
 - Mayday's sandbox module is in `infra/license-request`; the Template, plan policy, and Wiz label are in `spacelift-solutions/demo`, under `admin/modules/mayday`.
 - The existing Intent policy remains in `license.rego.tftpl`; the Template's separate Deploy policy is `license_request.rego.tftpl`.
+- Use Template version 1.2.0 for demos: unique timestamped stacks expire after one hour, deleting their sandbox objects under `license-requests/`.
+- The shared bucket and Intent's live `license/demo-license.json` remain intact; policy reserves the name `demo-license`.
+
+If the short Intent repair prompt needs more detail:
+
+```text
+Refresh the existing mayday-license resource, then update that same resource with the valid checked-in demo-license.json content, including its trailing newline, and ETag 0ddb3ebffccfbffc98c50fbbcfd18fdc.
+Preserve its bucket/key, empty ACL, and AES256 encryption.
+Check live service health afterward.
+```
