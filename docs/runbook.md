@@ -119,14 +119,15 @@ The bearer token does not grant access to the operator API.
 ## Flow callback rollout
 
 Keep the monitor scaled down and Flux reconciliation suspended while switching both sides.
-This change does not provision a public hostname, TLS certificate, ingress controller, or tunnel.
-The existing `ClusterIP` Service and an operator's port-forward are not reachable by Flows.
+The public callback is `https://mayday.spacelift.shovel-emporium.com/api/flows/result`.
+The shared cluster already runs AWS Load Balancer Controller. Mayday provisions its
+ACM certificate in `infra/target/callback.tf` and its ALB Ingress in `kubernetes/callback.yaml`.
 
-1. Arrange a stable HTTPS hostname through the cluster's ingress or a tunnel, routing **only** `/api/flows/result` to `mayday/mayday-monitor:8080`. Keep `/api/login`, fault controls, and the dashboard private. Preserve the `Authorization` header and do not redirect callback requests.
+1. Apply `demo/opentofu/aws/dns`, delegate `spacelift.shovel-emporium.com` from Cloudflare to its four Route 53 nameservers, and reconcile the ExternalDNS release in the Flux repository. Apply `mayday-target` to issue the ACM certificate using DNS validation. OpenTofu owns only the certificate validation CNAMEs; ExternalDNS owns the application alias and its ownership TXT record. The Ingress allows only HTTPS POST to the exact `/api/flows/result` path on `mayday/mayday-monitor:8080`; the dashboard and fault controls remain private. The ALB controller discovers the issued certificate from the Ingress hostname.
 2. Publish the updated monitor image and pin its digest in `kubernetes/monitor.yaml`. Keep replicas at zero until the Flow is updated. The callback uses the existing encrypted `FLOWS_WEBHOOK_TOKEN`; no new credential is needed.
-3. Set `TF_VAR_monitor_callback_url` on `mayday-flows` to `https://<hostname>/api/flows/result`. The deployment root replaces the `.invalid` URL marker in the native definition with this required value. Do not apply an old export that lacks the callback block.
+3. Set `TF_VAR_monitor_callback_url` on `mayday-flows` to `https://mayday.spacelift.shovel-emporium.com/api/flows/result`. The deployment root replaces the `.invalid` URL marker in the native definition with this required value. Do not apply an old export that lacks the callback block.
 4. Plan and confirm the Flow change. Preserve the Flow ID and Monitor webhook path. Verify that the observation storage and five-second verification loop are removed, and that **Report result to monitor** is linked to all three terminal outcome blocks.
-5. Resume the monitor only after the new image, callback route, and Flow agree. Verify unauthenticated callback requests return 401, then rehearse an incident and check the dashboard's Flow result. Keep an eye on incoming Flow events while idle: there should be none from the monitor.
+5. Reconcile the Ingress and verify the ALB is created, its certificate is issued, and ExternalDNS has published the alias. Resume the monitor only after the new image, callback route, and Flow agree. Verify unauthenticated callback requests return 401, then rehearse an incident and check the dashboard's Flow result. Keep an eye on incoming Flow events while idle: there should be none from the monitor.
 
 `POST /api/flows/result` accepts a JSON body and `Authorization: Bearer <FLOWS_WEBHOOK_TOKEN>`:
 

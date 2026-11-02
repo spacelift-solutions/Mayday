@@ -27,7 +27,8 @@ metadata:
   labels:
     app.kubernetes.io/name: mayday-monitor
 spec:
-  replicas: 1
+  # Resume after the callback route, image and Flow have all been deployed.
+  replicas: 0
   strategy:
     type: Recreate
   selector:
