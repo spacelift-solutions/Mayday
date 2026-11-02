@@ -36,7 +36,7 @@ jobs:
       - run: make smoke
       - name: Validate infrastructure configuration
         run: |
-          for root in infra/target flows/deploy; do
+          for root in infra/target infra/license-request flows/deploy; do
             tofu -chdir="$root" init -backend=false -lockfile=readonly
             tofu -chdir="$root" validate
           done
