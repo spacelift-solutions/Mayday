@@ -35,12 +35,23 @@ type Observation struct {
 }
 
 type Incident struct {
-	ID       string     `json:"id"`
-	Kind     string     `json:"kind"`
-	Status   string     `json:"status"`
-	OpenedAt time.Time  `json:"opened_at"`
-	ClosedAt *time.Time `json:"closed_at,omitempty"`
-	Message  string     `json:"message"`
+	ID         string      `json:"id"`
+	AttemptID  string      `json:"attempt_id,omitempty"`
+	FlowResult *FlowResult `json:"flow_result,omitempty"`
+	Kind       string      `json:"kind"`
+	Status     string      `json:"status"`
+	OpenedAt   time.Time   `json:"opened_at"`
+	ClosedAt   *time.Time  `json:"closed_at,omitempty"`
+	Message    string      `json:"message"`
+}
+
+// FlowResult describes orchestration, never proof that the target recovered.
+type FlowResult struct {
+	IncidentID string `json:"incident_id"`
+	AttemptID  string `json:"attempt_id"`
+	Status     string `json:"status"`
+	RunID      string `json:"run_id,omitempty"`
+	RunState   string `json:"run_state,omitempty"`
 }
 
 type Event struct {

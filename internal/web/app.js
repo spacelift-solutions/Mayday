@@ -21,6 +21,11 @@ const kinds = {
   capacity_down: "Capacity ready to scale down",
   reset: "Restoring the baseline",
 };
+const flowStatuses = {
+  succeeded: "Run finished",
+  evidence_ready: "Diagnostic evidence ready",
+  failed: "Recovery failed",
+};
 function showSession(active) {
   signedIn = active;
   el("login-panel").hidden = active;
@@ -95,6 +100,17 @@ async function refresh() {
         : "No active incident",
     );
     text("incident-id", i ? i.id : "None");
+    text("incident-message", i?.message || "");
+    const result = i?.flow_result;
+    text(
+      "flow-result",
+      result
+        ? (flowStatuses[result.status] || result.status) +
+          (result.run_id ? " · " + result.run_id : "")
+        : i
+          ? "Awaiting result"
+          : "None",
+    );
     text("delivery", s.delivery_error || "");
     el("retry").disabled = busy || !i || i.status !== "failed";
     const active = i && i.status !== "recovered";

@@ -13,6 +13,14 @@ variable "flows_endpoint" {
   default = "useflows.eu"
 }
 variable "project_id" { type = string }
+variable "monitor_callback_url" {
+  type        = string
+  description = "Public HTTPS endpoint routed to the monitor's POST /api/flows/result handler."
+  validation {
+    condition     = can(regex("^https://[A-Za-z0-9][A-Za-z0-9.-]+(:443)?/api/flows/result$", var.monitor_callback_url)) && !strcontains(var.monitor_callback_url, ".invalid/")
+    error_message = "Set a reachable HTTPS hostname with path /api/flows/result and no credentials, query, or fragment."
+  }
+}
 variable "webhook_token" {
   type      = string
   sensitive = true
@@ -28,7 +36,7 @@ resource "flows_secret" "webhook" {
 resource "flows_flow" "recovery" {
   project_id = var.project_id
   name       = "Mayday recovery"
-  definition = file("${path.module}/../recovery.yaml")
+  definition = replace(file("${path.module}/../recovery.yaml"), "https://mayday-callback.invalid/api/flows/result", var.monitor_callback_url)
   enabled    = true
   depends_on = [flows_secret.webhook]
 }

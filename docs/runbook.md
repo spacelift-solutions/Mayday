@@ -38,7 +38,7 @@
    Commit only the encrypted file; use SOPS for subsequent edits.
 6. Set `TF_VAR_webhook_token` on `mayday-flows` as a write-only environment variable, using the same webhook token from the encrypted Secret.
    The admin module leaves this variable under operator control.
-7. Run/confirm `mayday-flows` after the admin apply.
+7. Configure the [Flow callback route](#flow-callback-rollout) and set `TF_VAR_monitor_callback_url` before running/confirming `mayday-flows` after the admin apply.
    Admin supplies `TF_VAR_project_id` and the project-scoped `FLOWS_TOKEN` deployment credential.
    This stack manages `MAYDAY_WEBHOOK_TOKEN` as a project secret and imports the native definition from `flows/recovery.yaml`.
    No custom app, published app version, or Spacelift recovery API key is required.
@@ -113,7 +113,44 @@ The browser does not store the password or an API token.
 The application rejects cross-origin browser mutations and limits failed login attempts.
 The default connection is a local HTTP port-forward.
 If the dashboard is exposed through HTTPS, set `SESSION_COOKIE_SECURE=true` on the monitor so the browser sends its cookie only over HTTPS.
-The outbound Flows webhook still uses its separate shared token.
+The outbound Flows webhook and inbound callback use `FLOWS_WEBHOOK_TOKEN`, separate from dashboard sessions.
+The bearer token does not grant access to the operator API.
+
+## Flow callback rollout
+
+Keep the monitor scaled down and Flux reconciliation suspended while switching both sides.
+The public callback is `https://mayday.spacelift.shovel-emporium.com/api/flows/result`.
+The shared cluster already runs AWS Load Balancer Controller. Mayday provisions its
+ACM certificate in `infra/target/callback.tf` and its ALB Ingress in `kubernetes/callback.yaml`.
+
+1. Apply `demo/opentofu/aws/dns`, delegate `spacelift.shovel-emporium.com` from Cloudflare to its four Route 53 nameservers, and reconcile the ExternalDNS release in the Flux repository. Apply `mayday-infrastructure` to issue the ACM certificate using DNS validation. OpenTofu owns only the certificate validation CNAMEs; ExternalDNS owns the application alias and its ownership TXT record. The Ingress allows only HTTPS POST to the exact `/api/flows/result` path on `mayday/mayday-monitor:8080`; the dashboard and fault controls remain private. The ALB controller discovers the issued certificate from the Ingress hostname.
+2. Publish the updated monitor image and pin its digest in `kubernetes/monitor.yaml`. Keep replicas at zero until the Flow is updated. The callback uses the existing encrypted `FLOWS_WEBHOOK_TOKEN`; no new credential is needed.
+3. Set `TF_VAR_monitor_callback_url` on `mayday-flows` to `https://mayday.spacelift.shovel-emporium.com/api/flows/result`. The deployment root replaces the `.invalid` URL marker in the native definition with this required value. Do not apply an old export that lacks the callback block.
+4. Plan and confirm the Flow change. Preserve the Flow ID and Monitor webhook path. Verify that the observation storage and five-second verification loop are removed, and that **Report result to monitor** is linked to all three terminal outcome blocks.
+5. Reconcile the Ingress and verify the ALB is created, its certificate is issued, and ExternalDNS has published the alias. Resume the monitor only after the new image, callback route, and Flow agree. Verify unauthenticated callback requests return 401, then rehearse an incident and check the dashboard's Flow result. Keep an eye on incoming Flow events while idle: there should be none from the monitor.
+
+`POST /api/flows/result` accepts a JSON body and `Authorization: Bearer <FLOWS_WEBHOOK_TOKEN>`:
+
+```json
+{
+  "incident_id": "<24-character incident ID>",
+  "attempt_id": "<24-character incident.opened event ID>",
+  "status": "succeeded",
+  "run_id": "<Spacelift run ID>",
+  "run_state": "FINISHED"
+}
+```
+
+Statuses are `succeeded`, `evidence_ready` (diagnostics only), or `failed`.
+Successful results require a run ID and `FINISHED`; errors or timeouts before a run starts may omit run fields.
+The first terminal result for the current attempt is persisted and shown on the dashboard.
+Duplicate and stale callbacks return 200 without changing the current result. Explicit retries create a new attempt ID.
+A callback never declares the target recovered: sustained successful local probes and work requests remain the only recovery evidence.
+Late results cannot reopen recovered incidents or clear monitor timeouts.
+
+Malformed results return 400, invalid credentials return 401, and persistence failures return 503 so delivery can be retried.
+If callback delivery fails (including a non-2xx response), inspect **Report result to monitor** and retry that input event after fixing connectivity. Do not replay incident intake or the Spacelift action to resend a result.
+The durable `mayday-attempts` result is retained for 24 hours. Callback delivery failures must not be routed into **Catch orchestration errors**, which would confuse transport failure with repair failure.
 
 ## Bootstrap and ownership
 
@@ -143,6 +180,7 @@ flowctl flow export --id 01a18e9c-62ac-7af4-9176-1a00ddbd5f2a --file flows/recov
 make flows-check PYTHON=.venv/bin/python
 ```
 
+After export, restore the callback URL marker `https://mayday-callback.invalid/api/flows/result` so the deployment variable continues to select the destination.
 Review the exported diff before applying the stack. An apply can overwrite unexported canvas changes.
 Do not rename blocks casually: the provider matches them by name. Keep the HTTP path stable so the monitor does not lose its endpoint.
 
@@ -211,12 +249,15 @@ Reset also returns load and capacity to the baseline; it is available only after
 ## Failure handling and repeated demos
 
 - The monitor uses a persistent volume for incident history and webhook outbox.
-  Failed deliveries are retried; pending telemetry snapshots are coalesced.
+  Only `incident.opened` events (new incidents, resets, and explicit retries) enter the outbox.
+  Health observations, fault/traffic activity, and recovery transitions stay local.
+  Failed incident deliveries are retried with the same event ID. On upgrade, pending legacy telemetry and activity are discarded; incident order is preserved.
 - Webhooks require a shared token.
   A native concurrency group and Memory blocks deduplicate event IDs for 24 hours.
   The Flow records delivery acceptance and a recovery attempt before calling Spacelift, so retrying delivery after an ambiguous failure does not automatically launch another repair.
   Intake failures release the lock and return HTTP 503; valid events and duplicates return 202.
-- Native Trigger Run completion is checked for `FINISHED`, then the Flow polls independent monitor evidence every five seconds with a ten-minute deadline.
+- Native Trigger Run completion is checked for `FINISHED`, then the Flow posts its result to the monitor.
+  There is no periodic Flow polling or observation storage. A single ten-minute deadline per attempt covers queued or stuck runs.
   A failed run or orchestration error records a failed outcome. A successful diagnostic run records `evidence_ready` for the human Intelligence/Intent handoff.
   The dashboard's five-minute incident timer remains independent; inspect ongoing runs before explicitly retrying.
 - Investigate a timed-out incident before clicking **Retry failed recovery**.
@@ -227,8 +268,7 @@ Reset also returns load and capacity to the baseline; it is available only after
 - A missing or invalid license goes to diagnosis.
   Increasing worker capacity cannot repair it.
   S3 access-denied and timeout errors remain distinct evidence.
-- The dashboard is accessed by port-forward; the monitor only makes outbound requests to Flows.
-  No SaaS callback into the private cluster is required.
+- The dashboard is accessed by port-forward. Flows needs an HTTPS route to the callback path on the monitor; see [Flow callback rollout](#flow-callback-rollout).
 
 ## Ownership and cleanup
 

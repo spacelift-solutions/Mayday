@@ -125,37 +125,66 @@ test("deduplicates before dispatch and releases intake on both outcomes", () => 
   assert.ok(next("Remember delivery", "default").some(b => b.name === "New incident"));
 });
 
-test("out-of-order observations cannot replace newer recovery evidence", () => {
-  const stored = sample();
-  const old = sample(); old.at = new Date(now - 10000).toISOString();
-  assert.equal(evaluate(input("Store observation").value, { outputs: context(old), stored }), stored);
-});
-
-test("verification rejects failed, stale, future, unrelated and empty observations", () => {
-  const e = sample(); e.incident.status = "recovered";
-  const outputs = { ...context(e), readIndependentObservation: { value: e } };
-  assert.equal(condition("Recovery verified", outputs), true);
-  for (const mutate of [e => e.incident.id = "different", e => e.incident.status = "open",
-    e => e.observation.errors = 1, e => e.observation.samples = 0,
-    e => e.observation.at = new Date(now - 16000).toISOString(),
-    e => e.observation.at = new Date(now + 6000).toISOString(),
-    e => e.observation.reachable = false, e => e.observation.health.status = "degraded"]) {
-    const bad = structuredClone(e); mutate(bad);
-    assert.equal(condition("Recovery verified", { ...outputs, readIndependentObservation: { value: bad } }), false);
-  }
-  assert.equal(condition("Recovery verified", { ...outputs, readIndependentObservation: { found: false } }), false);
-  assert.equal(condition("Recovery verified", { ...outputs, normalizeIncident: { ...outputs.normalizeIncident, deadline: now } }), false);
-});
-
 test("run completion and deadline preserve terminal outcomes", () => {
   for (const state of ["FAILED", "CANCELED", "DISCARDED"]) {
     assert.equal(condition("Run finished successfully", { captureRunResult: { state } }), false);
   }
   assert.equal(condition("Run finished successfully", { captureRunResult: { state: "FINISHED" } }), true);
-  for (const status of ["recovered", "failed", "evidence_ready"]) {
+  for (const status of ["succeeded", "failed", "evidence_ready"]) {
     const stored = { status };
-    for (const name of ["Record verified recovery", "Record failed recovery", "Evidence ready for Intelligence"]) {
+    for (const name of ["Record successful run", "Record failed recovery", "Evidence ready for Intelligence"]) {
       assert.equal(evaluate(input(name).value, { stored, outputs: {} }), stored);
     }
   }
+});
+
+test("every terminal outcome reports the persisted result with attempt correlation", () => {
+  const event = sample();
+  const outputs = { ...context(event), captureRunResult: { runId: "run-123", state: "FINISHED", run: { id: "run-123" } } };
+  for (const [name, status] of [["Record successful run", "succeeded"], ["Record failed recovery", "failed"], ["Evidence ready for Intelligence", "evidence_ready"]]) {
+    assert.ok(next(name, "default").some(b => b.name === "Report result to monitor"));
+    const value = evaluate(input(name).value, { outputs, stored: { status: "starting" } });
+    const body = evaluate(input("Report result to monitor").body, { outputs, previous: { value } });
+    assert.equal(body.status, status);
+    assert.equal(body.incident_id, event.incident.id);
+    assert.equal(body.attempt_id, event.id);
+    assert.equal(body.run_id, "run-123");
+    assert.equal(body.run_state, "FINISHED");
+  }
+  const failed = evaluate(input("Record failed recovery").value, { stored: undefined, outputs: context(event) });
+  const body = evaluate(input("Report result to monitor").body, { outputs: context(event), previous: { value: failed } });
+  assert.equal(body.status, "failed");
+  assert.equal(body.run_id, "");
+  // A timer racing a completion sends the stored winner, not a new failure.
+  const winner = { status: "succeeded", incident: event.incident, run: outputs.captureRunResult };
+  const preserved = evaluate(input("Record failed recovery").value, { outputs, stored: winner });
+  assert.equal(evaluate(input("Report result to monitor").body, { outputs, previous: { value: preserved } }).status, "succeeded");
+});
+
+test("callbacks use authenticated POST and never feed back into recovery", () => {
+  const report = blocks["Report result to monitor"];
+  assert.equal(report.type.coreBlock, "httpRequest");
+  assert.equal(input(report.name).method, "POST");
+  assert.equal(input(report.name).url, "https://mayday-callback.invalid/api/flows/result");
+  assert.equal(evaluate(input(report.name).headers.Authorization, { secrets: { MAYDAY_WEBHOOK_TOKEN: "test-token" } }), "Bearer test-token");
+  assert.equal(report.errorHandler, undefined);
+  assert.equal(next(report.name, "default").length, 0);
+});
+
+test("no observation storage or polling remains; only one deadline per attempt", () => {
+  const timers = flow.blocks.filter(b => b.type.coreBlock === "sleep");
+  assert.deepEqual(timers.map(b => b.name), ["Recovery deadline"]);
+  assert.equal(input("Recovery deadline").sleep, 600);
+  for (const block of flow.blocks) {
+    for (const socket of Object.values(block.inputs || {})) {
+      assert.notEqual(socket.config?.collection, "mayday-observations");
+    }
+  }
+  assert.ok(next("First delivery", "then").some(b => b.name === "Remember delivery"));
+  assert.ok(next("Diagnostic action", "else").some(b => b.name === "Record successful run"));
+  assert.ok(next("Diagnostic action", "then").some(b => b.name === "Evidence ready for Intelligence"));
+  for (const status of ["succeeded", "failed", "evidence_ready"]) {
+    assert.equal(condition("Still awaiting recovery", { readRecoveryOutcome: { found: true, value: { status } } }), false);
+  }
+  assert.equal(condition("Still awaiting recovery", { readRecoveryOutcome: { found: true, value: { status: "starting" } } }), true);
 });

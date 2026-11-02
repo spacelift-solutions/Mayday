@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mayday-callback
+  namespace: mayday
+  labels:
+    app.kubernetes.io/name: mayday-monitor
+  annotations:
+    alb.ingress.kubernetes.io/load-balancer-name: mayday-callback
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/healthcheck-path: /livez
+    alb.ingress.kubernetes.io/conditions.mayday-monitor: '[{"field":"http-request-method","httpRequestMethodConfig":{"values":["POST"]}}]'
+    external-dns.kubernetes.io/hostname: mayday.spacelift.shovel-emporium.com
+spec:
+  ingressClassName: alb
+  # The controller discovers the issued ACM certificate from this hostname.
+  rules:
+    - host: mayday.spacelift.shovel-emporium.com
+      http:
+        paths:
+          - path: /api/flows/result
+            pathType: Exact
+            backend:
+              service:
+                name: mayday-monitor
+                port:
+                  number: 8080
