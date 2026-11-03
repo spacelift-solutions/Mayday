@@ -1,5 +1,16 @@
 # Mayday demo walkthrough
 
+- **Stacks and multi-IaC:** OpenTofu provisioning and Ansible configuration in one platform, with native output and run history.
+- **Developer workflow:** Git integration, PR preview plans, policy evaluation, and tracked runs after merge.
+- **Deployment controls:** Manual confirmation, resource-change visibility, and an auditable record of each run.
+- **Plugins and extensibility:** Wiz findings in run output, shared contexts, label-based attachment, lifecycle hooks, and Spaceforge for custom plugins.
+- **Stack dependencies:** Ordered execution and output-to-input references, passing OpenTofu infrastructure data into Ansible inventory through Tofusible.
+- **Self-service Templates:** Request forms, Templates Workbench, versioned deployments, and updating an existing deployment.
+- **Policy enforcement:** Deny an invalid license request before apply, correct its input, and pass the same policy.
+- **Intelligence and Intent:** Diagnose a broken service with the Assistant, repair an existing resource through Intent under policy, and inspect operation history.
+- **Flows:** Webhook triggers, conditional branches, collapsible groups, Spacelift run triggers, and result callbacks; discuss reusable app blocks and managing Flows with OpenTofu.
+- **Automated operations:** Recover a stopped service and adjust application worker capacity in response to traffic through Flows and Ansible.
+
 ## 1. Stack the Basics
 
 Open the [Stacks view](https://spacelift-solutions.app.spacelift.io/stacks).
